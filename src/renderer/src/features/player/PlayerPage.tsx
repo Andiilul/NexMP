@@ -1,21 +1,99 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { FolderOpen, Play } from 'lucide-react'
 import type { VideoFile } from '../../../../shared/types/media'
+import { HotkeysModal } from './HotkeysModal'
 import { PlayerControls } from './PlayerControls'
-import { SkipIndicator, type SkipFeedback } from './SkipIndicator'
+import { PlaylistPanel } from './PlaylistPanel'
+import { Toast, type ToastMessage } from './Toast'
 import { createHtmlVideoPlaybackEngine } from './playbackEngine'
+import { formatTime } from './time'
+import logoIconMonochrome from '../../../../../public/logos/logo-icon-monochrome.png'
 
 const defaultSkipSeconds = 5
 const shiftedSkipSeconds = 10
 const controlledSkipSeconds = 30
 const alternateSkipSeconds = 60
 const controlsVisibleMs = 2400
-const skipFeedbackVisibleMs = 1200
+const toastVisibleMs = 1200
+const volumeStep = 0.05
+const speedStep = 0.25
+const minPlaybackRate = 0.25
+const maxPlaybackRate = 4
+const showControllerPreviewWithoutVideo = import.meta.env.DEV
+const previewVideoFile: VideoFile = {
+  name: 'Controller preview',
+  extension: 'mp4',
+  path: 'Preview mode - open a video to test playback',
+  url: ''
+}
 const mediaErrorMessages: Record<number, string> = {
   1: 'Video loading was aborted.',
   2: 'Network error while loading the video.',
   3: 'Video decode failed. The container opened, but the codec may be unsupported.',
   4: 'Unsupported video source or unreadable file.'
+}
+
+const videoRatios = ['original', '16:9', '4:3', '16:10', '1:1', '2.21:1', '2.35:1', '5:4'] as const
+type VideoRatio = (typeof videoRatios)[number]
+type Size = {
+  width: number
+  height: number
+}
+
+function getNextRatio(currentRatio: VideoRatio): VideoRatio {
+  const currentIndex = videoRatios.indexOf(currentRatio)
+  return videoRatios[(currentIndex + 1) % videoRatios.length]
+}
+
+function getRatioValue(ratio: VideoRatio, naturalSize: Size | null): number {
+  switch (ratio) {
+    case '16:9':
+      return 16 / 9
+    case '4:3':
+      return 4 / 3
+    case '16:10':
+      return 16 / 10
+    case '1:1':
+      return 1
+    case '2.21:1':
+      return 2.21
+    case '2.35:1':
+      return 2.35
+    case '5:4':
+      return 5 / 4
+    default:
+      if (naturalSize && naturalSize.width > 0 && naturalSize.height > 0) {
+        return naturalSize.width / naturalSize.height
+      }
+
+      return 16 / 9
+  }
+}
+
+function getContainSize(containerSize: Size, ratio: number): Size {
+  if (containerSize.width <= 0 || containerSize.height <= 0) {
+    return { width: 0, height: 0 }
+  }
+
+  const containerRatio = containerSize.width / containerSize.height
+
+  if (containerRatio > ratio) {
+    return {
+      width: containerSize.height * ratio,
+      height: containerSize.height
+    }
+  }
+
+  return {
+    width: containerSize.width,
+    height: containerSize.width / ratio
+  }
+}
+
+function formatSkipAmount(seconds: number): string {
+  if (seconds === 60) return '1 Minute'
+
+  return `${seconds} Sec`
 }
 
 function getKeyboardSkipSeconds(event: KeyboardEvent): number {
@@ -26,11 +104,40 @@ function getKeyboardSkipSeconds(event: KeyboardEvent): number {
   return defaultSkipSeconds
 }
 
+function openBrowserVideoFile(): Promise<VideoFile | null> {
+  return new Promise((resolve) => {
+    const input = document.createElement('input')
+
+    input.type = 'file'
+    input.accept = 'video/*,.mp4,.mkv,.webm,.mov,.avi,.m4v'
+    input.onchange = () => {
+      const file = input.files?.[0]
+
+      if (!file) {
+        resolve(null)
+        return
+      }
+
+      const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
+
+      resolve({
+        name: file.name,
+        extension,
+        path: file.name,
+        url: URL.createObjectURL(file)
+      })
+    }
+
+    input.click()
+  })
+}
+
 export function PlayerPage(): React.JSX.Element {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const shellRef = useRef<HTMLDivElement | null>(null)
+  const playerStageRef = useRef<HTMLDivElement | null>(null)
   const controlsTimerRef = useRef<number | null>(null)
-  const skipFeedbackTimerRef = useRef<number | null>(null)
+  const toastTimerRef = useRef<number | null>(null)
   const controlsPinnedRef = useRef(false)
   const shouldAutoplayRef = useRef(false)
   const [videoFile, setVideoFile] = useState<VideoFile | null>(null)
@@ -41,7 +148,16 @@ export function PlayerPage(): React.JSX.Element {
   const [duration, setDuration] = useState(0)
   const [volume, setVolume] = useState(0.85)
   const [error, setError] = useState<string | null>(null)
-  const [skipFeedback, setSkipFeedback] = useState<SkipFeedback | null>(null)
+  const [toast, setToast] = useState<ToastMessage | null>(null)
+  const [showHotkeys, setShowHotkeys] = useState(false)
+  const [showPlaylist, setShowPlaylist] = useState(false)
+  const [playlist, setPlaylist] = useState<VideoFile[]>([])
+  const [activePlaylistIndex, setActivePlaylistIndex] = useState<number | null>(null)
+  const [playbackRate, setPlaybackRate] = useState(1)
+  const [aspectRatio, setAspectRatio] = useState<VideoRatio>('original')
+  const [subtitlesEnabled, setSubtitlesEnabled] = useState(true)
+  const [playerStageSize, setPlayerStageSize] = useState<Size>({ width: 0, height: 0 })
+  const [naturalVideoSize, setNaturalVideoSize] = useState<Size | null>(null)
 
   const getEngine = useCallback(() => {
     if (!videoRef.current) return null
@@ -66,6 +182,40 @@ export function PlayerPage(): React.JSX.Element {
     hideControlsLater()
   }, [hideControlsLater])
 
+  useEffect(() => {
+    const playerStage = playerStageRef.current
+    if (!playerStage) return
+
+    const updatePlayerStageSize = (): void => {
+      setPlayerStageSize({
+        width: playerStage.clientWidth,
+        height: playerStage.clientHeight
+      })
+    }
+
+    updatePlayerStageSize()
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0]
+
+      if (!entry) {
+        updatePlayerStageSize()
+        return
+      }
+
+      setPlayerStageSize({
+        width: entry.contentRect.width,
+        height: entry.contentRect.height
+      })
+    })
+
+    observer.observe(playerStage)
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [])
+
   const playCurrentVideo = useCallback(async () => {
     const engine = getEngine()
     if (!engine || !videoFile) return
@@ -80,25 +230,47 @@ export function PlayerPage(): React.JSX.Element {
     }
   }, [getEngine, revealControls, videoFile])
 
+  const activateVideo = useCallback(
+    (nextVideo: VideoFile, nextIndex: number, autoplay: boolean) => {
+      shouldAutoplayRef.current = autoplay
+      setVideoFile(nextVideo)
+      setActivePlaylistIndex(nextIndex)
+      setCurrentTime(0)
+      setDuration(0)
+      setIsPlaying(false)
+      setError(null)
+      setNaturalVideoSize(null)
+    },
+    []
+  )
+
   const openVideo = useCallback(async () => {
     setError(null)
 
     try {
-      const result = await window.api.media.openVideo()
+      const result = window.api
+        ? await window.api.media.openVideo()
+        : await openBrowserVideoFile().then((video) =>
+            video
+              ? { canceled: false as const, video, playlist: [video], selectedIndex: 0 }
+              : { canceled: true as const }
+          )
 
-      if (result.canceled) return
+      if (result.canceled || !result.video) return
 
-      shouldAutoplayRef.current = true
-      setVideoFile(result.video)
-      setCurrentTime(0)
-      setDuration(0)
-      setIsPlaying(false)
+      const nextPlaylist = result.playlist.length > 0 ? result.playlist : [result.video]
+      const nextSelectedIndex = Math.min(result.selectedIndex, nextPlaylist.length - 1)
+
+      setPlaylist(nextPlaylist)
+      activateVideo(nextPlaylist[nextSelectedIndex] ?? result.video, nextSelectedIndex, true)
+      setAspectRatio('original')
+      setShowPlaylist(nextPlaylist.length > 1)
       revealControls()
     } catch {
       setError('Could not open the selected video.')
       revealControls()
     }
-  }, [revealControls])
+  }, [activateVideo, revealControls])
 
   useEffect(() => {
     const engine = getEngine()
@@ -116,13 +288,19 @@ export function PlayerPage(): React.JSX.Element {
   }, [getEngine, volume])
 
   useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.playbackRate = playbackRate
+    }
+  }, [playbackRate])
+
+  useEffect(() => {
     return () => {
       if (controlsTimerRef.current) {
         window.clearTimeout(controlsTimerRef.current)
       }
 
-      if (skipFeedbackTimerRef.current) {
-        window.clearTimeout(skipFeedbackTimerRef.current)
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current)
       }
     }
   }, [])
@@ -148,24 +326,28 @@ export function PlayerPage(): React.JSX.Element {
     }
   }, [getEngine, hideControlsLater, revealControls, videoFile])
 
-  const showSkipFeedback = useCallback(
+  const showToast = useCallback((message: ToastMessage) => {
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current)
+    }
+
+    setToast(message)
+
+    toastTimerRef.current = window.setTimeout(() => {
+      setToast(null)
+    }, toastVisibleMs)
+  }, [])
+
+  const showSkipToast = useCallback(
     (seconds: number, targetTime: number) => {
-      if (skipFeedbackTimerRef.current) {
-        window.clearTimeout(skipFeedbackTimerRef.current)
-      }
+      const direction = seconds >= 0 ? 'Forward' : 'Backward'
 
-      setSkipFeedback({
-        seconds: Math.abs(seconds),
-        direction: seconds >= 0 ? 'forward' : 'backward',
-        currentTime: targetTime,
-        duration
+      showToast({
+        title: `Skip ${formatSkipAmount(Math.abs(seconds))} ${direction}`,
+        description: `${formatTime(targetTime)} / ${formatTime(duration)}`
       })
-
-      skipFeedbackTimerRef.current = window.setTimeout(() => {
-        setSkipFeedback(null)
-      }, skipFeedbackVisibleMs)
     },
-    [duration]
+    [duration, showToast]
   )
 
   const seekTo = useCallback(
@@ -185,9 +367,113 @@ export function PlayerPage(): React.JSX.Element {
       const safeTargetTime = Math.min(Math.max(currentTime + seconds, 0), duration || 0)
 
       seekTo(safeTargetTime)
-      showSkipFeedback(seconds, safeTargetTime)
+      showSkipToast(seconds, safeTargetTime)
     },
-    [currentTime, duration, seekTo, showSkipFeedback]
+    [currentTime, duration, seekTo, showSkipToast]
+  )
+
+  const playPlaylistItem = useCallback(
+    (nextIndex: number, autoplay = true) => {
+      const nextVideo = playlist[nextIndex]
+      if (!nextVideo) return
+
+      activateVideo(nextVideo, nextIndex, autoplay)
+      revealControls()
+    },
+    [activateVideo, playlist, revealControls]
+  )
+
+  const playNextPlaylistItem = useCallback(() => {
+    if (activePlaylistIndex === null) return
+
+    const nextIndex = activePlaylistIndex + 1
+    if (nextIndex >= playlist.length) {
+      setIsPlaying(false)
+      revealControls()
+      showToast({ title: 'End of Playlist' })
+      return
+    }
+
+    playPlaylistItem(nextIndex, true)
+    showToast({
+      title: 'Next Video',
+      description: playlist[nextIndex]?.name
+    })
+  }, [activePlaylistIndex, playPlaylistItem, playlist, revealControls, showToast])
+
+  const playPreviousPlaylistItem = useCallback(() => {
+    if (activePlaylistIndex === null) return
+
+    const previousIndex = activePlaylistIndex - 1
+    if (previousIndex < 0) {
+      showToast({ title: 'Start of Playlist' })
+      revealControls()
+      return
+    }
+
+    playPlaylistItem(previousIndex, true)
+    showToast({
+      title: 'Previous Video',
+      description: playlist[previousIndex]?.name
+    })
+  }, [activePlaylistIndex, playPlaylistItem, playlist, revealControls, showToast])
+
+  const reorderPlaylist = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return
+      if (fromIndex >= playlist.length || toIndex >= playlist.length) return
+
+      const reorderedPlaylist = [...playlist]
+      const [movedVideo] = reorderedPlaylist.splice(fromIndex, 1)
+
+      if (!movedVideo) return
+
+      reorderedPlaylist.splice(toIndex, 0, movedVideo)
+      setPlaylist(reorderedPlaylist)
+
+      if (videoFile) {
+        const nextActiveIndex = reorderedPlaylist.findIndex(
+          (video) => video.path === videoFile.path
+        )
+        setActivePlaylistIndex(nextActiveIndex >= 0 ? nextActiveIndex : null)
+      }
+    },
+    [playlist, videoFile]
+  )
+
+  const removePlaylistItem = useCallback(
+    (index: number) => {
+      const removedVideo = playlist[index]
+      if (!removedVideo) return
+
+      const nextPlaylist = playlist.filter((_, itemIndex) => itemIndex !== index)
+      setPlaylist(nextPlaylist)
+
+      if (videoFile?.path === removedVideo.path) {
+        const replacementIndex = Math.min(index, nextPlaylist.length - 1)
+        const replacementVideo = nextPlaylist[replacementIndex]
+
+        if (replacementVideo) {
+          activateVideo(replacementVideo, replacementIndex, true)
+        } else {
+          getEngine()?.destroy()
+          setVideoFile(null)
+          setActivePlaylistIndex(null)
+          setCurrentTime(0)
+          setDuration(0)
+          setIsPlaying(false)
+          setError(null)
+          setNaturalVideoSize(null)
+        }
+      } else if (videoFile) {
+        const nextActiveIndex = nextPlaylist.findIndex((item) => item.path === videoFile.path)
+        setActivePlaylistIndex(nextActiveIndex >= 0 ? nextActiveIndex : null)
+      }
+
+      showToast({ title: 'Removed from Playlist', description: removedVideo.name })
+      revealControls()
+    },
+    [activateVideo, getEngine, playlist, revealControls, showToast, videoFile]
   )
 
   const changeVolume = useCallback(
@@ -205,6 +491,19 @@ export function PlayerPage(): React.JSX.Element {
     [getEngine, revealControls]
   )
 
+  const changeVolumeBy = useCallback(
+    (delta: number) => {
+      const nextVolume = Math.min(Math.max(volume + delta, 0), 1)
+
+      changeVolume(nextVolume)
+      showToast({
+        title: delta > 0 ? 'Volume Up' : 'Volume Down',
+        description: `${Math.round(nextVolume * 100)}%`
+      })
+    },
+    [changeVolume, showToast, volume]
+  )
+
   const toggleMute = useCallback(() => {
     const video = videoRef.current
     if (!video) return
@@ -212,27 +511,116 @@ export function PlayerPage(): React.JSX.Element {
     const nextMuted = !video.muted
     video.muted = nextMuted
     setIsMuted(nextMuted)
+    showToast({ title: nextMuted ? 'Mute' : 'Unmute' })
     revealControls()
-  }, [revealControls])
+  }, [revealControls, showToast])
 
   const toggleFullscreen = useCallback(async () => {
     if (document.fullscreenElement) {
       await document.exitFullscreen()
+      showToast({ title: 'Exit Fullscreen' })
       revealControls()
       return
     }
 
     await shellRef.current?.requestFullscreen()
+    showToast({ title: 'Enter Fullscreen' })
     revealControls()
-  }, [revealControls])
+  }, [revealControls, showToast])
+
+  const stopVideo = useCallback(() => {
+    getEngine()?.destroy()
+    setVideoFile(null)
+    setActivePlaylistIndex(null)
+    setCurrentTime(0)
+    setDuration(0)
+    setIsPlaying(false)
+    setError(null)
+    setNaturalVideoSize(null)
+    showToast({ title: 'Stop' })
+    revealControls()
+  }, [getEngine, revealControls, showToast])
+
+  const changePlaybackRateBy = useCallback(
+    (delta: number) => {
+      const nextRate = Math.min(Math.max(playbackRate + delta, minPlaybackRate), maxPlaybackRate)
+      const safeRate = Number(nextRate.toFixed(2))
+
+      setPlaybackRate(safeRate)
+      showToast({
+        title: delta > 0 ? 'Speed Up' : 'Speed Down',
+        description: `${safeRate.toFixed(2)}x`
+      })
+      revealControls()
+    },
+    [playbackRate, revealControls, showToast]
+  )
+
+  const resetPlaybackRate = useCallback(() => {
+    setPlaybackRate(1)
+    showToast({ title: 'Speed Reset', description: '1.00x' })
+    revealControls()
+  }, [revealControls, showToast])
+
+  const cycleAspectRatio = useCallback(() => {
+    const nextRatio = getNextRatio(aspectRatio)
+
+    setAspectRatio(nextRatio)
+    showToast({ title: 'Aspect Ratio', description: nextRatio })
+    revealControls()
+  }, [aspectRatio, revealControls, showToast])
+
+  const toggleSubtitles = useCallback(() => {
+    const video = videoRef.current
+    const nextEnabled = !subtitlesEnabled
+
+    if (video) {
+      for (const track of Array.from(video.textTracks)) {
+        track.mode = nextEnabled ? 'showing' : 'disabled'
+      }
+    }
+
+    setSubtitlesEnabled(nextEnabled)
+    showToast({ title: nextEnabled ? 'Subtitles On' : 'Subtitles Off' })
+    revealControls()
+  }, [revealControls, showToast, subtitlesEnabled])
+
+  const switchAudioTrack = useCallback(() => {
+    showToast({ title: 'Audio Track', description: 'Not available yet' })
+    revealControls()
+  }, [revealControls, showToast])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {
       if (event.target instanceof HTMLInputElement) return
 
+      if (showHotkeys) {
+        if (event.code === 'Escape') {
+          event.preventDefault()
+          setShowHotkeys(false)
+          showToast({ title: 'Close Hotkeys' })
+        }
+        return
+      }
+
       if (event.code === 'Space') {
         event.preventDefault()
+        showToast({ title: isPlaying ? 'Pause' : 'Play' })
         void togglePlay()
+      }
+
+      if (event.code === 'KeyG') {
+        event.preventDefault()
+        setShowHotkeys(true)
+        showToast({ title: 'Open Hotkeys' })
+        revealControls()
+      }
+
+      if (event.code === 'KeyL') {
+        event.preventDefault()
+        setShowPlaylist((isVisible) => !isVisible)
+        showToast({ title: showPlaylist ? 'Close Playlist' : 'Open Playlist' })
+        revealControls()
       }
 
       if (event.code === 'ArrowLeft') {
@@ -245,6 +633,16 @@ export function PlayerPage(): React.JSX.Element {
         skipBy(getKeyboardSkipSeconds(event))
       }
 
+      if (event.code === 'ArrowUp') {
+        event.preventDefault()
+        changeVolumeBy(volumeStep)
+      }
+
+      if (event.code === 'ArrowDown') {
+        event.preventDefault()
+        changeVolumeBy(-volumeStep)
+      }
+
       if (event.code === 'KeyM') {
         event.preventDefault()
         toggleMute()
@@ -254,6 +652,62 @@ export function PlayerPage(): React.JSX.Element {
         event.preventDefault()
         void toggleFullscreen()
       }
+
+      if (event.code === 'Escape') {
+        event.preventDefault()
+        if (document.fullscreenElement) {
+          void document.exitFullscreen()
+          showToast({ title: 'Exit Fullscreen' })
+        } else {
+          showToast({ title: 'Hide Overlay' })
+        }
+        setShowControls(false)
+      }
+
+      if (event.code === 'KeyS' && event.ctrlKey) {
+        event.preventDefault()
+        stopVideo()
+      }
+
+      if (event.code === 'KeyN') {
+        event.preventDefault()
+        playNextPlaylistItem()
+      }
+
+      if (event.code === 'KeyP') {
+        event.preventDefault()
+        playPreviousPlaylistItem()
+      }
+
+      if (event.code === 'BracketLeft') {
+        event.preventDefault()
+        changePlaybackRateBy(-speedStep)
+      }
+
+      if (event.code === 'BracketRight') {
+        event.preventDefault()
+        changePlaybackRateBy(speedStep)
+      }
+
+      if (event.code === 'Backslash') {
+        event.preventDefault()
+        resetPlaybackRate()
+      }
+
+      if (event.code === 'KeyA') {
+        event.preventDefault()
+        cycleAspectRatio()
+      }
+
+      if (event.code === 'KeyH') {
+        event.preventDefault()
+        toggleSubtitles()
+      }
+
+      if (event.code === 'KeyB') {
+        event.preventDefault()
+        switchAudioTrack()
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
@@ -261,94 +715,154 @@ export function PlayerPage(): React.JSX.Element {
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [skipBy, toggleFullscreen, toggleMute, togglePlay])
+  }, [
+    changePlaybackRateBy,
+    changeVolumeBy,
+    cycleAspectRatio,
+    playNextPlaylistItem,
+    playPreviousPlaylistItem,
+    revealControls,
+    resetPlaybackRate,
+    showHotkeys,
+    showPlaylist,
+    showToast,
+    isPlaying,
+    skipBy,
+    stopVideo,
+    switchAudioTrack,
+    toggleFullscreen,
+    toggleMute,
+    togglePlay,
+    toggleSubtitles
+  ])
 
-  const isOverlayVisible = showControls || skipFeedback !== null
+  const displayedVideoFile =
+    videoFile ?? (showControllerPreviewWithoutVideo ? previewVideoFile : null)
+  const displayedCurrentTime = videoFile ? currentTime : 0
+  const displayedDuration = videoFile ? duration : 0
+  const displayedIsPlaying = videoFile ? isPlaying : false
+  const isPreviewingControls = showControllerPreviewWithoutVideo && !videoFile
+  const isOverlayVisible = isPreviewingControls || showControls || toast !== null
   const controlsClassName = isOverlayVisible
     ? 'pointer-events-auto absolute inset-0 z-20 grid grid-rows-[auto_minmax(0,1fr)_auto] opacity-100 transition-opacity duration-150'
     : 'pointer-events-none absolute inset-0 z-20 grid grid-rows-[auto_minmax(0,1fr)_auto] opacity-0 transition-opacity duration-150'
+  const activeVideoRatio = getRatioValue(aspectRatio, naturalVideoSize)
+  const containedVideoSize = getContainSize(playerStageSize, activeVideoRatio)
+  const videoFrameStyle =
+    containedVideoSize.width > 0 && containedVideoSize.height > 0
+      ? { width: `${containedVideoSize.width}px`, height: `${containedVideoSize.height}px` }
+      : undefined
+  const videoFrameClassName =
+    'grid min-h-0 min-w-0 place-items-center overflow-hidden bg-[#050608] transition-[width,height] duration-300 ease-out'
+  const videoClassName = 'block h-full w-full bg-[#050608] object-fill'
+  const shellClassName = showPlaylist
+    ? 'grid h-[calc(100vh-36px)] grid-cols-[320px_minmax(0,1fr)] overflow-hidden rounded-lg border border-white/[0.08] bg-[#050608] shadow-[0_24px_80px_rgba(0,0,0,0.35)] transition-[grid-template-columns] duration-300 ease-out'
+    : 'grid h-[calc(100vh-36px)] grid-cols-[0px_minmax(0,1fr)] overflow-hidden rounded-lg border border-white/[0.08] bg-[#050608] shadow-[0_24px_80px_rgba(0,0,0,0.35)] transition-[grid-template-columns] duration-300 ease-out'
 
   return (
-    <main className="from-nex-ink via-nex-black to-nex-black min-h-screen bg-gradient-to-br p-[18px]">
-      <section
-        className="border-nex-green/15 bg-nex-black h-[calc(100vh-36px)] overflow-hidden rounded-lg border shadow-[0_24px_80px_rgba(0,217,130,0.08)]"
-        ref={shellRef}
-      >
+    <main className="min-h-screen bg-[#101114] p-[18px]">
+      <section className={shellClassName} ref={shellRef}>
+        <div className="min-w-0 overflow-hidden">
+          <PlaylistPanel
+            isVisible={showPlaylist}
+            playlist={playlist}
+            activeIndex={activePlaylistIndex}
+            onPlay={playPlaylistItem}
+            onRemove={removePlaylistItem}
+            onReorder={reorderPlaylist}
+          />
+        </div>
         <div
-          className="bg-nex-black relative grid h-full w-full place-items-center overflow-hidden"
+          ref={playerStageRef}
+          className="relative grid h-full min-h-0 min-w-0 place-items-center overflow-hidden bg-[#08090b] transition-[width] duration-300 ease-out"
           onMouseMove={videoFile ? revealControls : undefined}
         >
-          {!videoFile && (
+          {!displayedVideoFile && (
             <button
-              className="border-nex-green/30 bg-nex-panel/90 text-nex-white hover:border-nex-green hover:bg-nex-deep absolute z-10 inline-flex items-center gap-3 rounded-lg border px-[18px] py-3.5 font-bold shadow-[0_18px_60px_rgba(0,217,130,0.12)]"
+              className="absolute z-10 inline-flex items-center gap-3 rounded-lg border border-white/12 bg-[#1c1f26]/90 px-[18px] py-3.5 font-bold text-[#f3f5fb]"
               type="button"
               onClick={openVideo}
             >
-              <img className="h-8 w-8 object-contain" src="/logos/logo-icon.png" alt="" />
+              <FolderOpen size={32} />
               <span>Open a video file</span>
             </button>
           )}
 
-          <video
-            ref={videoRef}
-            autoPlay
-            className="bg-nex-black block h-full w-full object-contain"
-            preload="metadata"
-            onCanPlay={() => {
-              if (!shouldAutoplayRef.current) return
+          <div className={videoFrameClassName} style={videoFrameStyle}>
+            <video
+              ref={videoRef}
+              autoPlay
+              className={videoClassName}
+              preload="metadata"
+              onCanPlay={() => {
+                if (!shouldAutoplayRef.current) return
 
-              shouldAutoplayRef.current = false
-              void playCurrentVideo()
-            }}
-            onClick={() => void togglePlay()}
-            onLoadedMetadata={(event) => setDuration(event.currentTarget.duration)}
-            onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
-            onPlay={() => {
-              setIsPlaying(true)
-              hideControlsLater()
-            }}
-            onPause={() => {
-              setIsPlaying(false)
-              revealControls()
-            }}
-            onVolumeChange={(event) => {
-              setIsMuted(event.currentTarget.muted)
-              setVolume(event.currentTarget.volume)
-            }}
-            onError={(event) => {
-              const errorCode = event.currentTarget.error?.code
-              setError(
-                errorCode
-                  ? mediaErrorMessages[errorCode]
-                  : 'Unsupported video format or unreadable file.'
-              )
-              revealControls()
-            }}
-          />
+                shouldAutoplayRef.current = false
+                void playCurrentVideo()
+              }}
+              onClick={() => void togglePlay()}
+              onLoadedMetadata={(event) => {
+                const video = event.currentTarget
 
-          {videoFile && (
+                setDuration(video.duration)
+                if (video.videoWidth > 0 && video.videoHeight > 0) {
+                  setNaturalVideoSize({
+                    width: video.videoWidth,
+                    height: video.videoHeight
+                  })
+                }
+              }}
+              onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
+              onEnded={playNextPlaylistItem}
+              onPlay={() => {
+                setIsPlaying(true)
+                hideControlsLater()
+              }}
+              onPause={() => {
+                setIsPlaying(false)
+                revealControls()
+              }}
+              onVolumeChange={(event) => {
+                setIsMuted(event.currentTarget.muted)
+                setVolume(event.currentTarget.volume)
+              }}
+              onError={(event) => {
+                const errorCode = event.currentTarget.error?.code
+                setError(
+                  errorCode
+                    ? mediaErrorMessages[errorCode]
+                    : 'Unsupported video format or unreadable file.'
+                )
+                revealControls()
+              }}
+            />
+          </div>
+
+          {displayedVideoFile && (
             <div className={controlsClassName}>
-              <div className="from-nex-black/75 pointer-events-none absolute inset-x-0 top-0 z-0 h-40 bg-gradient-to-b to-transparent" />
-              <div className="from-nex-black/90 pointer-events-none absolute inset-x-0 bottom-0 z-0 h-[230px] bg-gradient-to-t to-transparent" />
-              <SkipIndicator feedback={skipFeedback} />
+              <div className="pointer-events-none absolute inset-x-0 top-0 z-0 h-40 bg-gradient-to-b from-black/70 to-transparent" />
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-[230px] bg-gradient-to-t from-black/85 to-transparent" />
+              <Toast message={toast} />
 
               <header className="z-10 flex items-center justify-between gap-4 px-[22px] py-5">
                 <div className="flex min-w-0 items-center gap-3">
-                  <img
-                    className="h-[38px] w-[38px] shrink-0 object-contain"
-                    src="/logos/logo-icon.png"
-                    alt=""
-                  />
+                  <span className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-lg bg-[#e9edf9]">
+                    <img
+                      className="h-[26px] w-[26px] object-contain"
+                      src={logoIconMonochrome}
+                      alt=""
+                    />
+                  </span>
                   <div>
-                    <h1 className="text-nex-green text-lg leading-[22px] font-bold">NexMP</h1>
-                    <p className="text-nex-muted max-w-[62vw] overflow-hidden text-ellipsis whitespace-nowrap text-[13px] leading-[18px]">
-                      {videoFile.name}
+                    <h1 className="text-lg leading-[22px] font-bold text-[#f3f5fb]">NexMP</h1>
+                    <p className="max-w-[62vw] overflow-hidden text-ellipsis whitespace-nowrap text-[13px] leading-[18px] text-[#ebeef8]/70">
+                      {displayedVideoFile.name}
                     </p>
                   </div>
                 </div>
 
                 <button
-                  className="bg-nex-green text-nex-black hover:bg-nex-white inline-flex min-h-[38px] items-center justify-center gap-2 rounded-md px-3.5 font-bold"
+                  className="inline-flex min-h-[38px] items-center justify-center gap-2 rounded-md bg-[#e9edf9] px-3.5 font-bold text-[#111319]"
                   type="button"
                   onClick={openVideo}
                 >
@@ -357,9 +871,9 @@ export function PlayerPage(): React.JSX.Element {
                 </button>
               </header>
 
-              {!isPlaying && (
+              {!displayedIsPlaying && (
                 <button
-                  className="bg-nex-green/95 text-nex-black hover:bg-nex-white z-10 grid h-[74px] w-[74px] place-items-center self-center justify-self-center rounded-full shadow-[0_14px_40px_rgba(0,217,130,0.24)]"
+                  className="z-10 grid h-[74px] w-[74px] place-items-center self-center justify-self-center rounded-full bg-[#e9edf9]/90 text-[#111319] shadow-[0_14px_40px_rgba(0,0,0,0.34)]"
                   type="button"
                   onClick={() => void togglePlay()}
                   aria-label="Play"
@@ -375,12 +889,17 @@ export function PlayerPage(): React.JSX.Element {
               )}
 
               <PlayerControls
-                videoFile={videoFile}
-                isPlaying={isPlaying}
+                videoFile={displayedVideoFile}
+                isPlaying={displayedIsPlaying}
                 isMuted={isMuted}
-                currentTime={currentTime}
-                duration={duration}
+                currentTime={displayedCurrentTime}
+                duration={displayedDuration}
                 volume={volume}
+                aspectRatioLabel={aspectRatio}
+                canPlayPrevious={activePlaylistIndex !== null && activePlaylistIndex > 0}
+                canPlayNext={
+                  activePlaylistIndex !== null && activePlaylistIndex < playlist.length - 1
+                }
                 onChangeVolume={changeVolume}
                 onControlsEnter={() => {
                   controlsPinnedRef.current = true
@@ -391,13 +910,24 @@ export function PlayerPage(): React.JSX.Element {
                   hideControlsLater()
                 }}
                 onSeek={seekTo}
-                onSkip={skipBy}
+                onCycleAspectRatio={cycleAspectRatio}
+                onPlayPrevious={playPreviousPlaylistItem}
+                onPlayNext={playNextPlaylistItem}
+                onOpenHotkeys={() => {
+                  setShowHotkeys(true)
+                  revealControls()
+                }}
+                onTogglePlaylist={() => {
+                  setShowPlaylist((isVisible) => !isVisible)
+                  revealControls()
+                }}
                 onToggleFullscreen={() => void toggleFullscreen()}
                 onToggleMute={toggleMute}
                 onTogglePlay={() => void togglePlay()}
               />
             </div>
           )}
+          {showHotkeys && <HotkeysModal onClose={() => setShowHotkeys(false)} />}
         </div>
       </section>
     </main>

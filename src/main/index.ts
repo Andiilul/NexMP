@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, shell, BrowserWindow, Menu } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerMediaIpc } from './ipc/mediaIpc'
@@ -6,6 +6,26 @@ import { registerMediaProtocol, registerMediaProtocolPrivileges } from './media/
 import icon from '../../resources/icon.png?asset'
 
 registerMediaProtocolPrivileges()
+
+function shouldBlockBrowserShortcut(event: Electron.Input): boolean {
+  const key = event.key.toLowerCase()
+  const hasControlOrCommand = event.control || event.meta
+
+  if (event.alt && !hasControlOrCommand && !event.shift) return true
+
+  if (!hasControlOrCommand) return false
+
+  return (
+    key === 'w' ||
+    key === 'r' ||
+    key === 'i' ||
+    key === '0' ||
+    key === '+' ||
+    key === '=' ||
+    key === '-' ||
+    key === '_'
+  )
+}
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -15,7 +35,7 @@ function createWindow(): void {
     minHeight: 600,
     show: false,
     autoHideMenuBar: true,
-    ...(process.platform === 'linux' ? { icon } : {}),
+    icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -24,8 +44,17 @@ function createWindow(): void {
     }
   })
 
+  mainWindow.setMenu(null)
+  mainWindow.removeMenu()
+
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+  })
+
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (shouldBlockBrowserShortcut(input)) {
+      event.preventDefault()
+    }
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -42,6 +71,7 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.nexmp.desktop')
+  Menu.setApplicationMenu(null)
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)

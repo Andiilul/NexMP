@@ -13,6 +13,8 @@ export const OpenVideoResultSchema = z.discriminatedUnion('canceled', [
   }),
   z.object({
     canceled: z.literal(false),
-    video: VideoFileSchema
+    video: VideoFileSchema,
+    playlist: z.array(VideoFileSchema),
+    selectedIndex: z.number().int().nonnegative()
   })
 ])

@@ -12,6 +12,8 @@ export type OpenVideoResult =
   | {
       canceled: false
       video: VideoFile
+      playlist: VideoFile[]
+      selectedIndex: number
     }
 
 export type MediaApi = {

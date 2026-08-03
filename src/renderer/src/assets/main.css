@@ -14,7 +14,7 @@
 
 @layer base {
   body {
-    @apply bg-nex-black text-nex-white min-w-[900px] overflow-hidden select-none;
+    @apply min-w-[900px] overflow-hidden bg-[#101114] text-white select-none;
   }
 
   button,
@@ -40,6 +40,36 @@
   }
 
   input[type='range'] {
-    @apply accent-nex-green;
+    @apply accent-[#e9edf9];
+  }
+
+  * {
+    scrollbar-color: rgba(255, 255, 255, 0.34) transparent;
+    scrollbar-width: thin;
+  }
+
+  *::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    min-height: 56px;
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-color: rgba(255, 255, 255, 0.28);
+    background-clip: content-box;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.48);
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: transparent;
   }
 }
