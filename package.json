@@ -23,9 +23,11 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "@tailwindcss/vite": "^4.3.3",
     "clsx": "^2.1.1",
     "lucide-react": "^1.28.0",
     "react-router-dom": "^7.18.2",
+    "tailwindcss": "^4.3.3",
     "zod": "^4.4.3",
     "zustand": "^5.0.14"
   },
