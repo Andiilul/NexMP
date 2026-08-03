@@ -2,6 +2,7 @@ import { app, shell, BrowserWindow, Menu } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerMediaIpc } from './ipc/mediaIpc'
+import { closeDatabase, initializeDatabase } from './database'
 import { registerMediaProtocol, registerMediaProtocolPrivileges } from './media/mediaProtocol'
 import icon from '../../resources/icon.png?asset'
 
@@ -73,6 +74,8 @@ app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.nexmp.desktop')
   Menu.setApplicationMenu(null)
 
+  initializeDatabase()
+
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
@@ -90,4 +93,8 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+app.on('before-quit', () => {
+  closeDatabase()
 })

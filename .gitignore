@@ -4,3 +4,12 @@ out
 .DS_Store
 .eslintcache
 *.log*
+
+# Local development and generated artifacts
+tmp/
+release/
+coverage/
+*.tsbuildinfo
+*.db
+*.db-shm
+*.db-wal
