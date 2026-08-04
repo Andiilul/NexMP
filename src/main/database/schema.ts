@@ -32,6 +32,8 @@ export const collections = sqliteTable(
     name: text('name').notNull(),
     coverPath: text('cover_path'),
     sortOrder: integer('sort_order').notNull().default(0),
+    rating: integer('rating').notNull().default(0),
+    isPinned: integer('is_pinned', { mode: 'boolean' }).notNull().default(false),
     ...timestamps
   },
   (table) => [
@@ -52,6 +54,7 @@ export const collectionSources = sqliteTable(
     sourcePath: text('source_path').notNull(),
     sortOrder: integer('sort_order').notNull().default(0),
     isMissing: integer('is_missing', { mode: 'boolean' }).notNull().default(false),
+    isDynamic: integer('is_dynamic', { mode: 'boolean' }).notNull().default(true),
     lastScannedAt: text('last_scanned_at'),
     ...timestamps
   },
@@ -78,6 +81,7 @@ export const mediaFiles = sqliteTable(
     durationSeconds: integer('duration_seconds'),
     sortOrder: integer('sort_order').notNull().default(0),
     isMissing: integer('is_missing', { mode: 'boolean' }).notNull().default(false),
+    isPending: integer('is_pending', { mode: 'boolean' }).notNull().default(false),
     modifiedAt: text('modified_at'),
     ...timestamps
   },

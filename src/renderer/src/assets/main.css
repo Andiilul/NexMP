@@ -26,6 +26,10 @@
     @apply border-0 text-inherit;
   }
 
+  button:focus {
+    outline: none;
+  }
+
   button:not(:disabled) {
     @apply cursor-pointer;
   }

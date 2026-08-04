@@ -33,6 +33,10 @@ export function initializeDatabase(): BetterSQLite3Database<typeof schema> {
   return database
 }
 
+export function getDatabase(): BetterSQLite3Database<typeof schema> {
+  return database ?? initializeDatabase()
+}
+
 export function closeDatabase(): void {
   sqlite?.close()
   sqlite = undefined

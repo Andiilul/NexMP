@@ -73,6 +73,25 @@ const migrations: Migration[] = [
         CHECK (id = 'app')
       );
     `
+  },
+  {
+    version: 2,
+    sql: `
+      ALTER TABLE collection_sources ADD COLUMN is_dynamic INTEGER NOT NULL DEFAULT 1;
+    `
+  },
+  {
+    version: 3,
+    sql: `
+      ALTER TABLE media_files ADD COLUMN is_pending INTEGER NOT NULL DEFAULT 0;
+    `
+  },
+  {
+    version: 4,
+    sql: `
+      ALTER TABLE collections ADD COLUMN rating INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE collections ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0;
+    `
   }
 ]
 

@@ -2,6 +2,8 @@ import { app, shell, BrowserWindow, Menu } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerMediaIpc } from './ipc/mediaIpc'
+import { registerCollectionIpc } from './ipc/collectionIpc'
+import { registerProfileIpc } from './ipc/profileIpc'
 import { closeDatabase, initializeDatabase } from './database'
 import { registerMediaProtocol, registerMediaProtocolPrivileges } from './media/mediaProtocol'
 import icon from '../../resources/icon.png?asset'
@@ -12,7 +14,9 @@ function shouldBlockBrowserShortcut(event: Electron.Input): boolean {
   const key = event.key.toLowerCase()
   const hasControlOrCommand = event.control || event.meta
 
-  if (event.alt && !hasControlOrCommand && !event.shift) return true
+  if (key === 'tab') return true
+
+  if (event.alt && !hasControlOrCommand && key !== 'f4') return true
 
   if (!hasControlOrCommand) return false
 
@@ -81,6 +85,8 @@ app.whenReady().then(() => {
   })
 
   registerMediaIpc()
+  registerCollectionIpc()
+  registerProfileIpc()
   registerMediaProtocol()
   createWindow()
 

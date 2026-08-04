@@ -1,8 +1,13 @@
+import type { CollectionApi } from './collection'
+import type { ProfileApi } from './profile'
+
 export type VideoFile = {
   name: string
   extension: string
   path: string
   url: string
+  sourceName?: string
+  collectionName?: string
 }
 
 export type OpenVideoResult =
@@ -22,4 +27,6 @@ export type MediaApi = {
 
 export type NexmpApi = {
   media: MediaApi
+  profiles: ProfileApi
+  collections: CollectionApi
 }

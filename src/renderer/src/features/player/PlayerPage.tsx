@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { FolderOpen, Play } from 'lucide-react'
+import { FolderOpen, LogOut, Play } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import type { VideoFile } from '../../../../shared/types/media'
+import type { PlayerRouteState } from '../collections/mediaPlayback'
 import { HotkeysModal } from './HotkeysModal'
 import { PlayerControls } from './PlayerControls'
 import { PlaylistPanel } from './PlaylistPanel'
@@ -133,14 +135,27 @@ function openBrowserVideoFile(): Promise<VideoFile | null> {
 }
 
 export function PlayerPage(): React.JSX.Element {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const initialRouteState = location.state as PlayerRouteState | null
+  const initialPlaylist = initialRouteState?.playlist ?? []
+  const initialSelectedIndex =
+    initialPlaylist.length > 0
+      ? Math.min(initialRouteState?.selectedIndex ?? 0, initialPlaylist.length - 1)
+      : null
+  const initialCollectionName =
+    initialRouteState?.collectionName ?? initialPlaylist[0]?.collectionName ?? null
+  const returnTo = initialRouteState?.returnTo ?? null
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const shellRef = useRef<HTMLDivElement | null>(null)
   const playerStageRef = useRef<HTMLDivElement | null>(null)
   const controlsTimerRef = useRef<number | null>(null)
   const toastTimerRef = useRef<number | null>(null)
   const controlsPinnedRef = useRef(false)
-  const shouldAutoplayRef = useRef(false)
-  const [videoFile, setVideoFile] = useState<VideoFile | null>(null)
+  const shouldAutoplayRef = useRef(initialPlaylist.length > 0)
+  const [videoFile, setVideoFile] = useState<VideoFile | null>(
+    initialSelectedIndex === null ? null : (initialPlaylist[initialSelectedIndex] ?? null)
+  )
   const [isPlaying, setIsPlaying] = useState(false)
   const [isMuted, setIsMuted] = useState(false)
   const [showControls, setShowControls] = useState(true)
@@ -150,9 +165,12 @@ export function PlayerPage(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<ToastMessage | null>(null)
   const [showHotkeys, setShowHotkeys] = useState(false)
-  const [showPlaylist, setShowPlaylist] = useState(false)
-  const [playlist, setPlaylist] = useState<VideoFile[]>([])
-  const [activePlaylistIndex, setActivePlaylistIndex] = useState<number | null>(null)
+  const [showPlaylist, setShowPlaylist] = useState(initialPlaylist.length > 1)
+  const [playlist, setPlaylist] = useState<VideoFile[]>(initialPlaylist)
+  const [activePlaylistIndex, setActivePlaylistIndex] = useState<number | null>(
+    initialSelectedIndex
+  )
+  const [collectionName, setCollectionName] = useState<string | null>(initialCollectionName)
   const [playbackRate, setPlaybackRate] = useState(1)
   const [aspectRatio, setAspectRatio] = useState<VideoRatio>('original')
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(true)
@@ -262,6 +280,7 @@ export function PlayerPage(): React.JSX.Element {
       const nextSelectedIndex = Math.min(result.selectedIndex, nextPlaylist.length - 1)
 
       setPlaylist(nextPlaylist)
+      setCollectionName(null)
       activateVideo(nextPlaylist[nextSelectedIndex] ?? result.video, nextSelectedIndex, true)
       setAspectRatio('original')
       setShowPlaylist(nextPlaylist.length > 1)
@@ -271,6 +290,10 @@ export function PlayerPage(): React.JSX.Element {
       revealControls()
     }
   }, [activateVideo, revealControls])
+
+  const exitPlayer = useCallback(() => {
+    navigate(returnTo && returnTo !== '/player' ? returnTo : '/home')
+  }, [navigate, returnTo])
 
   useEffect(() => {
     const engine = getEngine()
@@ -531,6 +554,7 @@ export function PlayerPage(): React.JSX.Element {
   const stopVideo = useCallback(() => {
     getEngine()?.destroy()
     setVideoFile(null)
+    setCollectionName(null)
     setActivePlaylistIndex(null)
     setCurrentTime(0)
     setDuration(0)
@@ -767,6 +791,7 @@ export function PlayerPage(): React.JSX.Element {
             isVisible={showPlaylist}
             playlist={playlist}
             activeIndex={activePlaylistIndex}
+            collectionName={collectionName}
             onPlay={playPlaylistItem}
             onRemove={removePlaylistItem}
             onReorder={reorderPlaylist}
@@ -854,7 +879,9 @@ export function PlayerPage(): React.JSX.Element {
                     />
                   </span>
                   <div>
-                    <h1 className="text-lg leading-[22px] font-bold text-[#f3f5fb]">NexMP</h1>
+                    <h1 className="max-w-[62vw] truncate text-lg leading-[22px] font-bold text-[#f3f5fb]">
+                      {collectionName ?? 'NexMP'}
+                    </h1>
                     <p className="max-w-[62vw] overflow-hidden text-ellipsis whitespace-nowrap text-[13px] leading-[18px] text-[#ebeef8]/70">
                       {displayedVideoFile.name}
                     </p>
@@ -864,10 +891,10 @@ export function PlayerPage(): React.JSX.Element {
                 <button
                   className="inline-flex min-h-[38px] items-center justify-center gap-2 rounded-md bg-[#e9edf9] px-3.5 font-bold text-[#111319]"
                   type="button"
-                  onClick={openVideo}
+                  onClick={exitPlayer}
                 >
-                  <FolderOpen size={18} />
-                  Open video
+                  <LogOut size={18} />
+                  Exit
                 </button>
               </header>
 
