@@ -641,12 +641,12 @@ export function MediaFilesViewer({
   }
 
   return (
-    <section className="mt-10">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
+    <section className="flex flex-col gap-4 pt-10">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-col gap-1">
           <h2 className="text-lg font-bold">{title}</h2>
           {isEditing && (
-            <p className="mt-1 text-xs text-[#a9c8bf]">
+            <p className="text-xs text-[#a9c8bf]">
               {selectedMediaIds.length} selected for bulk actions
             </p>
           )}
@@ -751,14 +751,14 @@ export function MediaFilesViewer({
         onClose={closeSmartRename}
         closeLabel="Close smart rename"
       >
-        <section className="mt-5 min-h-0 flex-1 space-y-5 overflow-x-hidden overflow-y-auto pr-1">
+        <section className="flex min-h-0 flex-1 flex-col gap-5 overflow-x-hidden overflow-y-auto pr-1">
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#0d0f12]/70 px-4 py-3">
-            <div>
+            <div className="flex flex-col gap-1">
               <p className="text-sm font-bold text-[#f4fff8]">
                 Found {smartRenamePatterns.length}{' '}
                 {smartRenamePatterns.length === 1 ? 'pattern' : 'patterns'}
               </p>
-              <p className="mt-1 text-xs text-[#a9c8bf]">
+              <p className="text-xs text-[#a9c8bf]">
                 Fixed text is editable. Variable chips are locked per file and will be preserved.
                 Extensions are locked too. Save only updates the stored media name; file paths stay
                 untouched.
@@ -812,16 +812,16 @@ export function MediaFilesViewer({
               No media files available for smart rename.
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="flex flex-col gap-4">
               {smartRenamePatterns.map((pattern) => (
                 <div
                   key={pattern.id}
                   className="rounded-xl border border-[#00b875]/35 bg-[#0d0f12] p-4"
                 >
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <div>
+                  <div className="flex items-center justify-between gap-3 pb-3">
+                    <div className="flex flex-col gap-1">
                       <h3 className="text-sm font-bold text-[#f4fff8]">{pattern.label}</h3>
-                      <p className="mt-1 text-xs text-[#a9c8bf]">
+                      <p className="text-xs text-[#a9c8bf]">
                         {pattern.files.length} {pattern.files.length === 1 ? 'file' : 'files'} -{' '}
                         {pattern.segments.filter((segment) => segment.type === 'variable').length}{' '}
                         locked
@@ -860,7 +860,7 @@ export function MediaFilesViewer({
                       {getSmartRenameExtensionPreview(pattern.files)}
                     </span>
                   </div>
-                  <div className="mt-3 space-y-1">
+                  <div className="flex flex-col gap-1 pt-3">
                     {pattern.segments
                       .filter(
                         (segment): segment is Extract<SmartRenameSegment, { type: 'variable' }> =>
@@ -872,9 +872,9 @@ export function MediaFilesViewer({
                         </p>
                       ))}
                   </div>
-                  <div className="mt-4 border-t border-white/10 pt-4">
+                  <div className="flex flex-col gap-3 border-t border-white/10 pt-4">
                     <button
-                      className="mb-3 flex w-full items-center justify-between gap-3 rounded-lg border border-white/10 px-3 py-2 text-left transition hover:bg-white/[0.04]"
+                      className="flex w-full items-center justify-between gap-3 rounded-lg border border-white/10 px-3 py-2 text-left transition hover:bg-white/[0.04]"
                       type="button"
                       onClick={() => toggleSmartRenamePreview(pattern.id)}
                       aria-expanded={openSmartRenamePreviewIds.includes(pattern.id)}
@@ -897,7 +897,7 @@ export function MediaFilesViewer({
                             className="min-w-0 rounded-lg border border-white/10 bg-white/[0.035] px-3 py-2"
                           >
                             <p className="truncate text-xs text-[#a9c8bf]">{file.filename}</p>
-                            <p className="mt-1 truncate text-sm font-semibold text-[#f4fff8]">
+                            <p className="truncate text-sm font-semibold text-[#f4fff8]">
                               {renderSmartRenameFilename(pattern, fileIndex)}
                             </p>
                           </div>
@@ -913,7 +913,7 @@ export function MediaFilesViewer({
       </Modal>
 
       <Modal isOpen={renameMedia !== null} title="Rename video" size="sm" onClose={closeRename}>
-        <div className="mt-5 flex items-center gap-2">
+        <div className="flex items-center gap-2">
           <input
             className="min-w-0 flex-1 rounded-lg border border-white/15 bg-[#0d0f12] px-4 py-3 text-[#f4fff8] outline-none focus:border-[#00b875]"
             value={renameValue}
@@ -929,7 +929,7 @@ export function MediaFilesViewer({
             </span>
           )}
         </div>
-        <div className="mt-5 flex justify-end gap-3">
+        <div className="flex justify-end gap-3">
           <button
             className="rounded-lg px-4 py-2.5 font-semibold text-[#a9c8bf] hover:bg-white/5"
             type="button"
@@ -954,11 +954,11 @@ export function MediaFilesViewer({
         size="sm"
         onClose={closeDeleteMedia}
       >
-        <div className="mt-5 rounded-lg border border-[#ff6f60]/25 bg-[#3e1c1f]/55 p-4 text-sm text-[#ffaaa0]">
+        <div className="rounded-lg border border-[#ff6f60]/25 bg-[#3e1c1f]/55 p-4 text-sm text-[#ffaaa0]">
           This only removes the saved media row from NexMP. The original file in Explorer will not
           be deleted.
         </div>
-        <div className="mt-4 max-h-44 overflow-y-auto rounded-lg border border-white/10 bg-[#0d0f12]/70">
+        <div className="max-h-44 overflow-y-auto rounded-lg border border-white/10 bg-[#0d0f12]/70">
           {deleteMediaNames.map((filename, index) => (
             <p
               key={`${filename}-${index}`}
@@ -968,7 +968,7 @@ export function MediaFilesViewer({
             </p>
           ))}
         </div>
-        <div className="mt-5 flex justify-end gap-3">
+        <div className="flex justify-end gap-3">
           <button
             className="rounded-lg px-4 py-2.5 font-semibold text-[#a9c8bf] hover:bg-white/5"
             type="button"

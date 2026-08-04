@@ -56,7 +56,7 @@ export function SourceCard({
           <Folder size={isGrid ? 34 : 24} />
         )}
       </button>
-      <div className={isGrid ? 'p-4' : 'min-w-0 flex-1'}>
+      <div className={isGrid ? 'flex flex-col gap-1 p-4' : 'flex min-w-0 flex-1 flex-col gap-1'}>
         <button
           className="block max-w-full truncate text-left font-bold text-[#f4fff8]"
           type="button"
@@ -64,8 +64,8 @@ export function SourceCard({
         >
           {source.name}
         </button>
-        <p className="mt-1 truncate text-sm text-[#a9c8bf]">{source.sourcePath}</p>
-        <p className="mt-1 text-xs text-[#a9c8bf]/70">
+        <p className="truncate text-sm text-[#a9c8bf]">{source.sourcePath}</p>
+        <p className="text-xs text-[#a9c8bf]/70">
           {source.isMissing
             ? 'Folder unavailable'
             : `${videoCount} ${videoCount === 1 ? 'video' : 'videos'}`}

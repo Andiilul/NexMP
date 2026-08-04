@@ -371,7 +371,7 @@ export function PlayerControls({
         >
           {timelinePreview.isVisible && duration > 0 && (
             <div
-              className="pointer-events-none absolute bottom-7 z-20 w-[184px] -translate-x-1/2 rounded-lg border border-white/10 bg-black/80 p-2 text-center text-[11px] text-white shadow-[0_14px_42px_rgba(0,0,0,0.45)] backdrop-blur-md"
+              className="pointer-events-none absolute bottom-7 z-20 flex w-[184px] -translate-x-1/2 flex-col gap-1 rounded-lg border border-white/10 bg-black/80 p-2 text-center text-[11px] text-white shadow-[0_14px_42px_rgba(0,0,0,0.45)] backdrop-blur-md"
               style={{
                 left: `${Math.min(Math.max(timelinePreview.percent * 100, 4), 96)}%`
               }}
@@ -389,9 +389,7 @@ export function PlayerControls({
                   </span>
                 )}
               </div>
-              <div className="mt-1 font-semibold tabular-nums">
-                {formatTime(timelinePreview.time)}
-              </div>
+              <div className="font-semibold tabular-nums">{formatTime(timelinePreview.time)}</div>
             </div>
           )}
           <input

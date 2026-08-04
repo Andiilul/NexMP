@@ -110,7 +110,7 @@ export function CollectionFormPage(): React.JSX.Element {
   }
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="flex w-full max-w-2xl flex-col gap-7">
       <button
         className="inline-flex items-center gap-2 text-sm font-semibold text-[#a9c8bf] transition hover:text-[#f4fff8]"
         type="button"
@@ -119,36 +119,40 @@ export function CollectionFormPage(): React.JSX.Element {
         <ArrowLeft size={17} />
         Back to Home
       </button>
-      <div className="mt-7 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-7">
-        <h1 className="text-2xl font-bold">Create Collection</h1>
-        <p className="mt-2 text-sm text-[#a9c8bf]">
-          Start with a name. Sources can be added whenever you are ready.
-        </p>
-        <form className="mt-8" onSubmit={(event) => void submit(event)}>
-          <label className="block text-sm font-semibold" htmlFor="collection-name">
-            Collection name
-          </label>
-          <input
-            id="collection-name"
-            className="mt-2 w-full rounded-lg border border-white/15 bg-[#0d0f12] px-4 py-3 text-[#f4fff8] outline-none placeholder:text-white/35 focus:border-[#00b875]"
-            placeholder="e.g. Anime"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            maxLength={80}
-            autoFocus
-          />
-          <div className="mt-7">
+      <div className="flex flex-col gap-8 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-7">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-2xl font-bold">Create Collection</h1>
+          <p className="text-sm text-[#a9c8bf]">
+            Start with a name. Sources can be added whenever you are ready.
+          </p>
+        </div>
+        <form className="flex flex-col gap-7" onSubmit={(event) => void submit(event)}>
+          <div className="flex flex-col gap-2">
+            <label className="block text-sm font-semibold" htmlFor="collection-name">
+              Collection name
+            </label>
+            <input
+              id="collection-name"
+              className="w-full rounded-lg border border-white/15 bg-[#0d0f12] px-4 py-3 text-[#f4fff8] outline-none placeholder:text-white/35 focus:border-[#00b875]"
+              placeholder="e.g. Anime"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              maxLength={80}
+              autoFocus
+            />
+          </div>
+          <div className="flex flex-col gap-2">
             <p className="text-sm font-semibold">
               Sources <span className="font-normal text-[#a9c8bf]">(optional)</span>
             </p>
             {sources.length === 0 ? (
-              <div className="mt-2 flex items-center gap-3 rounded-xl border border-dashed border-white/15 bg-[#0d0f12]/45 p-4 text-[#a9c8bf]">
+              <div className="flex items-center gap-3 rounded-xl border border-dashed border-white/15 bg-[#0d0f12]/45 p-4 text-[#a9c8bf]">
                 <span className="grid h-10 w-10 place-items-center rounded-lg bg-white/5">
                   <FolderOpen size={20} />
                 </span>
-                <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <p className="text-sm font-semibold text-[#f4fff8]">No source folders yet</p>
-                  <p className="mt-0.5 text-xs">Choose one or more folders to scan for videos.</p>
+                  <p className="text-xs">Choose one or more folders to scan for videos.</p>
                 </div>
                 <button
                   className="inline-flex items-center gap-2 rounded-lg bg-[#00b875] px-3 py-2 text-sm font-bold text-[#04120d] transition hover:bg-[#00d982]"
@@ -160,7 +164,7 @@ export function CollectionFormPage(): React.JSX.Element {
                 </button>
               </div>
             ) : (
-              <div className="mt-2 space-y-2">
+              <div className="flex flex-col gap-2">
                 {sources.map((source) => (
                   <section
                     key={source.sourcePath}
@@ -188,7 +192,7 @@ export function CollectionFormPage(): React.JSX.Element {
                         />
                       </button>
                       <FolderOpen className="shrink-0 text-[#00d982]" size={18} />
-                      <div className="min-w-0 flex-1 space-y-2">
+                      <div className="flex min-w-0 flex-1 flex-col gap-2">
                         <input
                           className="w-full rounded-lg border border-white/15 bg-[#171a1f] px-3 py-2 text-sm font-bold text-[#f4fff8] outline-none placeholder:text-white/35 focus:border-[#00b875]"
                           value={source.name}
@@ -207,7 +211,7 @@ export function CollectionFormPage(): React.JSX.Element {
                         <span className="block truncate text-xs text-[#a9c8bf]">
                           {source.sourcePath}
                         </span>
-                        <span className="mt-0.5 block text-xs text-[#a9c8bf]/65">
+                        <span className="block text-xs text-[#a9c8bf]/65">
                           {source.preview.length} videos -{' '}
                           {source.isDynamic
                             ? 'dynamic'
@@ -298,11 +302,11 @@ export function CollectionFormPage(): React.JSX.Element {
               </div>
             )}
           </div>
-          <div className="mt-7">
+          <div className="flex flex-col gap-2">
             <p className="text-sm font-semibold">
               Tags <span className="font-normal text-[#a9c8bf]">(optional)</span>
             </p>
-            <div className="mt-2 flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2">
               {tags.map((tag) => (
                 <button
                   key={tag.id}
@@ -321,7 +325,7 @@ export function CollectionFormPage(): React.JSX.Element {
                 </button>
               ))}
             </div>
-            <div className="mt-3 flex gap-2">
+            <div className="flex gap-2 pt-1">
               <input
                 className="min-w-0 flex-1 rounded-lg border border-white/15 bg-[#0d0f12] px-3 py-2 text-sm outline-none focus:border-[#00b875]"
                 placeholder="Create a new tag"
@@ -338,8 +342,8 @@ export function CollectionFormPage(): React.JSX.Element {
               </button>
             </div>
           </div>
-          {error && <p className="mt-5 text-sm text-[#ffaaa0]">{error}</p>}
-          <div className="mt-8 flex justify-end gap-3">
+          {error && <p className="text-sm text-[#ffaaa0]">{error}</p>}
+          <div className="flex justify-end gap-3 pt-1">
             <button
               className="rounded-lg px-4 py-2.5 font-semibold text-[#a9c8bf] transition hover:bg-white/5 hover:text-[#f4fff8]"
               type="button"

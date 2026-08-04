@@ -84,21 +84,21 @@ export function HotkeysModal({ onClose }: HotkeysModalProps): React.JSX.Element 
         aria-labelledby="hotkeys-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <header className="border-b border-white/10 px-6 py-5">
+        <header className="flex flex-col gap-1 border-b border-white/10 px-6 py-5">
           <h2 id="hotkeys-title" className="text-xl font-bold">
             Hotkeys
           </h2>
-          <p className="mt-1 text-sm text-[#ebeef8]/60">Keyboard shortcuts for the video player.</p>
+          <p className="text-sm text-[#ebeef8]/60">Keyboard shortcuts for the video player.</p>
         </header>
 
         <div className="grid max-h-[calc(78vh-96px)] gap-5 overflow-y-auto p-6 md:grid-cols-2">
           {hotkeyCategories.map((category) => (
             <section
               key={category.title}
-              className="rounded-lg border border-white/10 bg-white/[0.035] p-4"
+              className="flex flex-col gap-3 rounded-lg border border-white/10 bg-white/[0.035] p-4"
             >
               <h3 className="text-sm font-bold text-[#f3f5fb]">{category.title}</h3>
-              <div className="mt-3 grid gap-2">
+              <div className="grid gap-2">
                 {category.items.map((item) => (
                   <div
                     key={`${category.title}-${item.keys}`}

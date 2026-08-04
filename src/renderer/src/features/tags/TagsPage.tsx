@@ -143,7 +143,7 @@ export function TagsPage(): React.JSX.Element {
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="flex w-full max-w-5xl flex-col gap-8">
       <button
         className="inline-flex items-center gap-2 text-sm font-semibold text-[#a9c8bf] transition hover:text-[#f4fff8]"
         type="button"
@@ -153,11 +153,11 @@ export function TagsPage(): React.JSX.Element {
         Back to Home
       </button>
 
-      <div className="mt-7 flex flex-wrap items-end justify-between gap-5">
-        <div>
-          <p className="mb-2 text-sm font-semibold text-[#00d982]">TAGS</p>
+      <div className="flex flex-wrap items-end justify-between gap-5">
+        <div className="flex flex-col gap-2">
+          <p className="text-sm font-semibold text-[#00d982]">TAGS</p>
           <h1 className="text-3xl font-bold tracking-tight">Manage tags</h1>
-          <p className="mt-2 text-[#a9c8bf]">
+          <p className="text-[#a9c8bf]">
             Create tags, delete unused ones, or click a tag to filter Home.
           </p>
         </div>
@@ -166,9 +166,9 @@ export function TagsPage(): React.JSX.Element {
         </div>
       </div>
 
-      <section className="mt-8 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5">
+      <section className="flex flex-col gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5">
         <h2 className="font-bold">Add tag</h2>
-        <div className="mt-4 flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <input
             className="min-w-64 flex-1 rounded-lg border border-white/15 bg-[#0d0f12] px-4 py-3 text-sm text-[#f4fff8] outline-none placeholder:text-white/35 focus:border-[#00b875]"
             placeholder="e.g. Action, Horror, When Yhhh :v"
@@ -209,10 +209,10 @@ export function TagsPage(): React.JSX.Element {
         </div>
       </section>
 
-      {error && <p className="mt-6 text-sm text-[#ffaaa0]">{error}</p>}
+      {error && <p className="text-sm text-[#ffaaa0]">{error}</p>}
 
       {isLoading ? (
-        <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {[1, 2, 3].map((item) => (
             <div
               key={item}
@@ -221,16 +221,18 @@ export function TagsPage(): React.JSX.Element {
           ))}
         </div>
       ) : tagsWithCount.length === 0 ? (
-        <section className="mt-8 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-8 py-14 text-center">
-          <Tags className="mx-auto text-[#a9c8bf]" size={32} />
-          <h2 className="mt-4 text-xl font-bold">No tags yet</h2>
-          <p className="mt-2 text-sm text-[#a9c8bf]">
-            Add your first tag, then assign it when creating or editing collections.
-          </p>
+        <section className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-8 py-14 text-center">
+          <Tags className="text-[#a9c8bf]" size={32} />
+          <div className="flex flex-col gap-2">
+            <h2 className="text-xl font-bold">No tags yet</h2>
+            <p className="text-sm text-[#a9c8bf]">
+              Add your first tag, then assign it when creating or editing collections.
+            </p>
+          </div>
         </section>
       ) : (
-        <section className="mt-8">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <section className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-bold">All tags</h2>
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-semibold text-[#a9c8bf]">Sort by</span>
@@ -258,7 +260,7 @@ export function TagsPage(): React.JSX.Element {
             {sortedTags.map((tag) => (
               <article
                 key={tag.id}
-                className="cursor-pointer rounded-xl border border-white/10 bg-[#171a1f] p-4 transition hover:border-[#00b875]/50 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00d982]"
+                className="flex cursor-pointer flex-col gap-4 rounded-xl border border-white/10 bg-[#171a1f] p-4 transition hover:border-[#00b875]/50 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00d982]"
                 role="button"
                 tabIndex={0}
                 onClick={() => navigate(`/home?tags=${tag.id}`)}
@@ -275,16 +277,16 @@ export function TagsPage(): React.JSX.Element {
                   >
                     #
                   </span>
-                  <span className="min-w-0 flex-1">
+                  <span className="flex min-w-0 flex-1 flex-col gap-1">
                     <span className="block truncate text-base font-bold">
                       {formatTagName(tag.name)}
                     </span>
-                    <span className="mt-1 block text-sm text-[#a9c8bf]">
+                    <span className="block text-sm text-[#a9c8bf]">
                       {tag.collectionCount} Collection
                     </span>
                   </span>
                 </div>
-                <div className="mt-4 flex items-center justify-end gap-3 border-t border-white/[0.07] pt-3">
+                <div className="flex items-center justify-end gap-3 border-t border-white/[0.07] pt-3">
                   <button
                     className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-[#ffaaa0] transition hover:bg-[#3e1c1f]/70"
                     type="button"
@@ -311,14 +313,14 @@ export function TagsPage(): React.JSX.Element {
       >
         {deleteTag && (
           <>
-            <div className="mt-5 rounded-lg border border-white/10 bg-[#0d0f12]/70 p-4">
+            <div className="flex flex-col gap-1 rounded-lg border border-white/10 bg-[#0d0f12]/70 p-4">
               <p className="font-bold">{formatTagName(deleteTag.name)}</p>
-              <p className="mt-1 text-sm text-[#a9c8bf]">
+              <p className="text-sm text-[#a9c8bf]">
                 Used by {deleteTag.collectionCount} collection. Deleting it will remove this tag
                 from those collections.
               </p>
             </div>
-            <div className="mt-5 flex justify-end gap-3">
+            <div className="flex justify-end gap-3">
               <button
                 className="rounded-lg px-4 py-2.5 font-semibold text-[#a9c8bf] hover:bg-white/5"
                 type="button"

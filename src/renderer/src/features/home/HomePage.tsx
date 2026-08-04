@@ -20,6 +20,7 @@ import { CollectionCard } from '../collections/CollectionCard'
 import type { CollectionCardData } from '../collections/types'
 import { createPlayablePlaylist, type PlayerRouteState } from '../collections/mediaPlayback'
 import { useAppState } from '../../components/useAppState'
+import { useToast } from '../../components/useToast'
 import { formatTagName } from '../tags/tagDisplay'
 
 type HomeLayoutContext = { openCollectionDialog: () => void }
@@ -44,6 +45,7 @@ export function HomePage(): React.JSX.Element {
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const { openCollectionDialog } = useOutletContext<HomeLayoutContext>()
+  const { warning } = useToast()
   const [collections, setCollections] = useState<HomeCollection[]>([])
   const [tags, setTags] = useState<Tag[]>([])
   const [searchQuery, setSearchQuery] = useState('')
@@ -152,7 +154,7 @@ export function HomePage(): React.JSX.Element {
       )
       if (playableMedia.length === 0) {
         setPlayPickerCollection(null)
-        setError('This collection does not have playable videos yet.')
+        warning('This collection does not have playable videos yet.')
         return
       }
 
@@ -161,7 +163,7 @@ export function HomePage(): React.JSX.Element {
     } catch (reason) {
       setPlayPickerCollection(null)
       setSelectedPlayPickerMediaIds([])
-      setError(reason instanceof Error ? reason.message : 'Unable to load playable videos.')
+      warning(reason instanceof Error ? reason.message : 'Unable to load playable videos.')
     } finally {
       setIsPlayPickerLoading(false)
     }
@@ -213,7 +215,7 @@ export function HomePage(): React.JSX.Element {
   const openAllPickerMedia = (): void => {
     const playlist = createPlayablePlaylist(selectedPlayPickerMedia)
     if (playlist.length === 0) {
-      setError('Select at least one video to play.')
+      warning('Select at least one video to play.')
       return
     }
 
@@ -430,12 +432,12 @@ export function HomePage(): React.JSX.Element {
   )
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="flex w-full max-w-6xl flex-col gap-8">
       <div className="flex items-end justify-between gap-6">
-        <div>
-          <p className="mb-2 text-sm font-semibold text-[#00d982]">YOUR LIBRARY</p>
+        <div className="flex min-w-0 flex-col gap-2">
+          <p className="text-sm font-semibold text-[#00d982]">YOUR LIBRARY</p>
           <h1 className="text-3xl font-bold tracking-tight">Welcome to NexMP</h1>
-          <p className="mt-2 text-[#a9c8bf]">
+          <p className="text-[#a9c8bf]">
             Organize your folders into collections and keep watching where you left off.
           </p>
         </div>
@@ -449,7 +451,7 @@ export function HomePage(): React.JSX.Element {
         </button>
       </div>
 
-      <section className="mt-8 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4">
+      <section className="flex flex-col gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4">
         <label className="flex items-center gap-3 rounded-xl border border-white/[0.08] bg-[#0d0f12] px-4 py-3 text-[#a9c8bf] focus-within:border-[#00b875]/70">
           <Search size={19} />
           <input
@@ -472,9 +474,9 @@ export function HomePage(): React.JSX.Element {
           )}
         </label>
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="mr-1 text-xs font-bold uppercase tracking-wide text-[#a9c8bf]">
+            <span className="text-xs font-bold uppercase tracking-wide text-[#a9c8bf]">
               Filter tags
             </span>
             {isLoading ? (
@@ -487,7 +489,7 @@ export function HomePage(): React.JSX.Element {
                 return (
                   <button
                     key={tag.id}
-                    className={`rounded-full border px-3 py-1.5 text-sm font-semibold transition ${
+                    className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-semibold transition ${
                       isSelected
                         ? 'border-transparent text-[#04120d]'
                         : 'border-white/15 text-[#a9c8bf] hover:border-white/30 hover:text-[#f4fff8]'
@@ -497,11 +499,11 @@ export function HomePage(): React.JSX.Element {
                     onClick={() => toggleTagFilter(tag.id)}
                   >
                     <span
-                      className="mr-2 inline-block h-2 w-2 rounded-full"
+                      className="inline-block h-2 w-2 rounded-full"
                       style={{ backgroundColor: tag.color }}
                     />
                     {formatTagName(tag.name)}
-                    <span className="ml-2 opacity-70">{tagCounts.get(tag.id) ?? 0}</span>
+                    <span className="opacity-70">{tagCounts.get(tag.id) ?? 0}</span>
                   </button>
                 )
               })
@@ -546,7 +548,7 @@ export function HomePage(): React.JSX.Element {
       </section>
 
       {isLoading && (
-        <section className="mt-10 flex flex-wrap items-start" aria-label="Loading collections">
+        <section className="flex flex-wrap items-start" aria-label="Loading collections">
           {[1, 2, 3].map((item) => (
             <div
               key={item}
@@ -557,20 +559,22 @@ export function HomePage(): React.JSX.Element {
         </section>
       )}
 
-      {error && <p className="mt-10 text-[#ffaaa0]">{error}</p>}
+      {error && <p className="text-[#ffaaa0]">{error}</p>}
 
       {!isLoading && !error && collections.length === 0 && (
-        <section className="mt-10 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-8 py-16 text-center">
-          <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-[#00b875]/15 text-[#00d982]">
+        <section className="flex flex-col items-center gap-5 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-8 py-16 text-center">
+          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-[#00b875]/15 text-[#00d982]">
             <FolderPlus size={27} />
           </span>
-          <h2 className="mt-5 text-xl font-bold">Start your first collection</h2>
-          <p className="mx-auto mt-2 max-w-md text-sm text-[#a9c8bf]">
-            A collection groups one or more video folders together. Your library stays separate for
-            every profile.
-          </p>
+          <div className="flex max-w-md flex-col gap-2">
+            <h2 className="text-xl font-bold">Start your first collection</h2>
+            <p className="text-sm text-[#a9c8bf]">
+              A collection groups one or more video folders together. Your library stays separate
+              for every profile.
+            </p>
+          </div>
           <button
-            className="mt-6 inline-flex items-center gap-2 rounded-lg bg-[#00b875] px-5 py-2.5 font-bold text-[#04120d] transition hover:bg-[#00d982]"
+            className="inline-flex items-center gap-2 rounded-lg bg-[#00b875] px-5 py-2.5 font-bold text-[#04120d] transition hover:bg-[#00d982]"
             type="button"
             onClick={openCollectionDialog}
           >
@@ -581,18 +585,20 @@ export function HomePage(): React.JSX.Element {
       )}
 
       {!isLoading && !error && collections.length > 0 && filteredCollections.length === 0 && (
-        <section className="mt-10 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-8 py-14 text-center">
-          <SearchX className="mx-auto text-[#a9c8bf]" size={30} />
-          <h2 className="mt-4 text-xl font-bold">No collections matched</h2>
-          <p className="mt-2 text-sm text-[#a9c8bf]">
-            Try another keyword, clear a tag, or switch the tag match mode.
-          </p>
+        <section className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-8 py-14 text-center">
+          <SearchX className="text-[#a9c8bf]" size={30} />
+          <div className="flex flex-col gap-2">
+            <h2 className="text-xl font-bold">No collections matched</h2>
+            <p className="text-sm text-[#a9c8bf]">
+              Try another keyword, clear a tag, or switch the tag match mode.
+            </p>
+          </div>
         </section>
       )}
 
       {!isLoading && !error && filteredCollections.length > 0 && (
-        <section className="mt-10">
-          <div className="mb-4 flex items-center justify-between gap-4">
+        <section className="flex flex-col gap-4">
+          <div className="flex items-center justify-between gap-4">
             <h2 className="text-lg font-bold">
               Collections{' '}
               <span className="text-sm font-semibold text-[#a9c8bf]">
@@ -658,9 +664,9 @@ export function HomePage(): React.JSX.Element {
             </div>
           </div>
           {pinOnTop && pinnedCollections.length > 0 && (
-            <div className="mb-9">
+            <div className="flex flex-col gap-3 pb-5">
               <button
-                className="mb-3 flex w-full items-center justify-between rounded-lg border border-white/10 px-3 py-2 text-left text-sm font-bold text-[#00d982] transition hover:bg-white/5"
+                className="flex w-full items-center justify-between rounded-lg border border-white/10 px-3 py-2 text-left text-sm font-bold text-[#00d982] transition hover:bg-white/5"
                 type="button"
                 onClick={() => setIsPinnedOpen((current) => !current)}
                 aria-expanded={isPinnedOpen}
@@ -681,9 +687,9 @@ export function HomePage(): React.JSX.Element {
             </div>
           )}
           {visibleCollections.length > 0 && (
-            <div>
+            <div className="flex flex-col gap-3">
               {pinOnTop && pinnedCollections.length > 0 && (
-                <h3 className="mb-3 text-sm font-bold text-[#a9c8bf]">All collections</h3>
+                <h3 className="text-sm font-bold text-[#a9c8bf]">All collections</h3>
               )}
               <div className="flex flex-wrap items-start">
                 {visibleCollections.map(renderCollectionTile)}
@@ -695,11 +701,11 @@ export function HomePage(): React.JSX.Element {
 
       {playPickerCollection && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 px-4">
-          <div className="w-full max-w-2xl rounded-xl border border-white/10 bg-[#171a1f] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.48)]">
+          <div className="flex w-full max-w-2xl flex-col gap-5 rounded-xl border border-white/10 bg-[#171a1f] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.48)]">
             <div className="flex items-start justify-between gap-4">
-              <div>
+              <div className="flex flex-col gap-1">
                 <h2 className="text-lg font-bold">Choose media</h2>
-                <p className="mt-1 text-sm text-[#a9c8bf]">{playPickerCollection.name}</p>
+                <p className="text-sm text-[#a9c8bf]">{playPickerCollection.name}</p>
               </div>
               <button
                 className="grid h-8 w-8 place-items-center rounded-md text-[#a9c8bf] hover:bg-white/5 hover:text-[#f4fff8]"
@@ -711,14 +717,14 @@ export function HomePage(): React.JSX.Element {
               </button>
             </div>
 
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-              <div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-col gap-1">
                 <p className="text-sm text-[#a9c8bf]">
                   {isPlayPickerLoading
                     ? 'Loading videos...'
                     : `${selectedPlayPickerMedia.length} of ${playPickerMedia.length} selected`}
                 </p>
-                <p className="mt-1 text-xs text-[#a9c8bf]/75">Order follows each folder setting.</p>
+                <p className="text-xs text-[#a9c8bf]/75">Order follows each folder setting.</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
@@ -753,7 +759,7 @@ export function HomePage(): React.JSX.Element {
               </div>
             </div>
 
-            <div className="mt-4 max-h-[56vh] overflow-y-auto rounded-lg border border-white/10 bg-[#0d0f12]/70">
+            <div className="max-h-[56vh] overflow-y-auto rounded-lg border border-white/10 bg-[#0d0f12]/70">
               {playPickerMedia.map((media) => {
                 const isSelected = selectedPlayPickerMediaIds.includes(media.id)
 
@@ -781,14 +787,14 @@ export function HomePage(): React.JSX.Element {
                       <Play size={16} fill="currentColor" />
                     </button>
                     <button
-                      className="min-w-0 flex-1 text-left"
+                      className="flex min-w-0 flex-1 flex-col gap-1 text-left"
                       type="button"
                       onClick={() => togglePlayPickerMedia(media.id)}
                     >
                       <span className="block truncate text-sm font-bold text-[#f4fff8]">
                         {media.filename}
                       </span>
-                      <span className="mt-1 block truncate text-xs text-[#a9c8bf]">
+                      <span className="block truncate text-xs text-[#a9c8bf]">
                         {media.sourceName} - {media.filePath}
                       </span>
                     </button>
@@ -802,7 +808,7 @@ export function HomePage(): React.JSX.Element {
 
       {renameCollection && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 px-4">
-          <div className="w-full max-w-md rounded-xl border border-white/10 bg-[#171a1f] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.48)]">
+          <div className="flex w-full max-w-md flex-col gap-5 rounded-xl border border-white/10 bg-[#171a1f] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.48)]">
             <div className="flex items-center justify-between gap-4">
               <h2 className="text-lg font-bold">Rename collection</h2>
               <button
@@ -814,13 +820,13 @@ export function HomePage(): React.JSX.Element {
               </button>
             </div>
             <input
-              className="mt-5 w-full rounded-lg border border-white/15 bg-[#0d0f12] px-4 py-3 text-[#f4fff8] outline-none focus:border-[#00b875]"
+              className="w-full rounded-lg border border-white/15 bg-[#0d0f12] px-4 py-3 text-[#f4fff8] outline-none focus:border-[#00b875]"
               value={renameValue}
               onChange={(event) => setRenameValue(event.target.value)}
               maxLength={80}
               autoFocus
             />
-            <div className="mt-5 flex justify-end">
+            <div className="flex justify-end">
               <button
                 className="rounded-lg px-4 py-2.5 font-semibold text-[#a9c8bf] hover:bg-white/5"
                 type="button"
@@ -843,8 +849,8 @@ export function HomePage(): React.JSX.Element {
 
       {deleteCollection && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 px-4">
-          <div className="w-full max-w-lg rounded-xl border border-white/10 bg-[#171a1f] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.48)]">
-            <div className="flex items-center">
+          <div className="flex w-full max-w-lg flex-col gap-5 rounded-xl border border-white/10 bg-[#171a1f] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.48)]">
+            <div className="flex items-center gap-3">
               <span className="grid h-10 w-10 place-items-center rounded-lg bg-[#3e1c1f] text-[#ffaaa0]">
                 <Trash2 size={20} />
               </span>
@@ -853,7 +859,7 @@ export function HomePage(): React.JSX.Element {
                 <p className="text-sm text-[#a9c8bf]">{deleteCollection.name}</p>
               </div>
             </div>
-            <div className="mt-5 rounded-lg border border-white/10 bg-[#0d0f12]/70 p-4 text-sm text-[#a9c8bf]">
+            <div className="rounded-lg border border-white/10 bg-[#0d0f12]/70 p-4 text-sm text-[#a9c8bf]">
               <p>
                 {deleteCollection.sources.length}{' '}
                 {deleteCollection.sources.length === 1 ? 'folder' : 'folders'} -{' '}
@@ -861,7 +867,7 @@ export function HomePage(): React.JSX.Element {
                 {deleteCollection.videoCount === 1 ? 'video' : 'videos'}
               </p>
               {deleteCollection.sources.length > 0 && (
-                <div className="mt-3 space-y-2">
+                <div className="flex flex-col gap-2 pt-3">
                   {deleteCollection.sources.map((source) => (
                     <div key={source.id} className="truncate rounded-md bg-white/[0.04] px-3 py-2">
                       {source.name} - {source.sourcePath}
@@ -870,10 +876,10 @@ export function HomePage(): React.JSX.Element {
                 </div>
               )}
             </div>
-            <p className="mt-4 text-sm text-[#ffaaa0]">
+            <p className="text-sm text-[#ffaaa0]">
               This removes the collection, its sources, and saved media rows from the library.
             </p>
-            <div className="mt-5 flex justify-end">
+            <div className="flex justify-end">
               <button
                 className="rounded-lg px-4 py-2.5 font-semibold text-[#a9c8bf] hover:bg-white/5"
                 type="button"

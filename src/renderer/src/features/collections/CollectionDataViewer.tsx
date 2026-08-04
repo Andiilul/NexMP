@@ -87,8 +87,8 @@ export function CollectionDataViewer<T>({
   }
 
   return (
-    <div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>{toolbarLeading}</div>
         <div className="flex rounded-lg border border-white/10 p-1">
           <button

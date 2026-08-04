@@ -34,7 +34,7 @@ export function Modal({
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 px-4">
       <div
-        className={`w-full rounded-xl border border-white/10 bg-[#171a1f] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.48)] ${modalSizeClassName[size]} ${className}`}
+        className={`flex w-full flex-col gap-5 rounded-xl border border-white/10 bg-[#171a1f] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.48)] ${modalSizeClassName[size]} ${className}`}
       >
         <div className="flex shrink-0 items-center justify-between gap-4">
           <h2 className="text-lg font-bold">{title}</h2>

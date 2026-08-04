@@ -72,14 +72,14 @@ export function ToastProvider({ children }: ToastProviderProps): React.JSX.Eleme
           return (
             <div
               key={message.id}
-              className={`rounded-xl border ${style.border} ${style.background} px-4 py-3 text-sm text-[#f4fff8] shadow-[0_18px_52px_rgba(0,0,0,0.45)] backdrop-blur-md`}
+              className={`flex flex-col gap-1 rounded-xl border ${style.border} ${style.background} px-4 py-3 text-sm text-[#f4fff8] shadow-[0_18px_52px_rgba(0,0,0,0.45)] backdrop-blur-md`}
             >
               <p className={`text-xs font-black uppercase tracking-[0.18em] ${style.accent}`}>
                 {message.mode}
               </p>
-              <p className="mt-1 font-bold">{message.title}</p>
+              <p className="font-bold">{message.title}</p>
               {message.description && (
-                <p className="mt-1 text-xs leading-relaxed text-[#a9c8bf]">{message.description}</p>
+                <p className="text-xs leading-relaxed text-[#a9c8bf]">{message.description}</p>
               )}
             </div>
           )

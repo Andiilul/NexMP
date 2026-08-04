@@ -27,12 +27,12 @@ export function CollectionsPage(): React.JSX.Element {
   }, [navigate])
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="flex w-full max-w-6xl flex-col gap-8">
       <div className="flex items-end justify-between gap-5">
-        <div>
-          <p className="mb-2 text-sm font-semibold text-[#00d982]">YOUR LIBRARY</p>
+        <div className="flex flex-col gap-2">
+          <p className="text-sm font-semibold text-[#00d982]">YOUR LIBRARY</p>
           <h1 className="text-3xl font-bold tracking-tight">Collections</h1>
-          <p className="mt-2 text-[#a9c8bf]">Organize your video folders in one place.</p>
+          <p className="text-[#a9c8bf]">Organize your video folders in one place.</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex rounded-lg border border-white/10 p-1">
@@ -63,16 +63,18 @@ export function CollectionsPage(): React.JSX.Element {
           </button>
         </div>
       </div>
-      {isLoading && <p className="mt-12 text-[#a9c8bf]">Loading collections...</p>}
-      {error && <p className="mt-12 text-[#ffaaa0]">{error}</p>}
+      {isLoading && <p className="text-[#a9c8bf]">Loading collections...</p>}
+      {error && <p className="text-[#ffaaa0]">{error}</p>}
       {!isLoading && !error && collections.length === 0 && (
-        <div className="mt-10 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-8 py-16 text-center">
-          <h2 className="text-xl font-bold">No collections yet</h2>
-          <p className="mt-2 text-sm text-[#a9c8bf]">
-            Create a collection now. You can add sources later.
-          </p>
+        <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-8 py-16 text-center">
+          <div className="flex flex-col gap-2">
+            <h2 className="text-xl font-bold">No collections yet</h2>
+            <p className="text-sm text-[#a9c8bf]">
+              Create a collection now. You can add sources later.
+            </p>
+          </div>
           <button
-            className="mt-6 rounded-lg bg-[#00b875] px-5 py-2.5 font-bold text-[#04120d]"
+            className="rounded-lg bg-[#00b875] px-5 py-2.5 font-bold text-[#04120d]"
             type="button"
             onClick={() => navigate('/home/collections/new')}
           >
@@ -83,7 +85,7 @@ export function CollectionsPage(): React.JSX.Element {
       {collections.length > 0 && (
         <div
           className={
-            viewMode === 'grid' ? 'mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4' : 'mt-8 space-y-3'
+            viewMode === 'grid' ? 'grid gap-4 sm:grid-cols-2 xl:grid-cols-4' : 'flex flex-col gap-3'
           }
         >
           {collections.map((collection) => (

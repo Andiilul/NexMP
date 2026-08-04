@@ -18,6 +18,7 @@ import type {
   SourceMediaOrder,
   SourceMediaPreview
 } from '../../../../shared/types/collection'
+import { useToast } from '../../components/useToast'
 import { CollectionDataViewer } from './CollectionDataViewer'
 import { createPlayablePlaylist, type PlayerRouteState } from './mediaPlayback'
 import {
@@ -53,6 +54,7 @@ export function CollectionDetailPage(): React.JSX.Element {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
+  const { warning } = useToast()
   const [collection, setCollection] = useState<CollectionWithSources | null>(null)
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([])
   const [editName, setEditName] = useState('')
@@ -164,7 +166,7 @@ export function CollectionDetailPage(): React.JSX.Element {
   const playCollection = (): void => {
     const playlist = createPlayablePlaylist(mediaFiles)
     if (playlist.length === 0) {
-      setError('This collection does not have playable videos yet.')
+      warning('This collection does not have playable videos yet.')
       return
     }
 
@@ -508,7 +510,7 @@ export function CollectionDetailPage(): React.JSX.Element {
   if (!collection && !error) return <p className="text-[#a9c8bf]">Loading collection...</p>
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="flex w-full max-w-6xl flex-col gap-7">
       <button
         className="inline-flex items-center gap-2 text-sm font-semibold text-[#a9c8bf] hover:text-[#f4fff8]"
         type="button"
@@ -519,27 +521,27 @@ export function CollectionDetailPage(): React.JSX.Element {
       </button>
 
       {error && (
-        <p className="mt-6 rounded-lg border border-[#ff6f60]/25 bg-[#3e1c1f]/60 px-4 py-3 text-sm text-[#ffaaa0]">
+        <p className="rounded-lg border border-[#ff6f60]/25 bg-[#3e1c1f]/60 px-4 py-3 text-sm text-[#ffaaa0]">
           {error}
         </p>
       )}
 
       {collection && (
         <>
-          <div className="mt-7 flex items-end justify-between gap-5">
-            <div className="min-w-0 flex-1">
+          <div className="flex items-end justify-between gap-5">
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
               <p className="text-sm font-semibold text-[#00d982]">COLLECTION</p>
               {isEditing ? (
                 <input
-                  className="mt-2 w-full max-w-xl rounded-lg border border-white/15 bg-[#0d0f12] px-4 py-3 text-2xl font-bold text-[#f4fff8] outline-none focus:border-[#00b875]"
+                  className="w-full max-w-xl rounded-lg border border-white/15 bg-[#0d0f12] px-4 py-3 text-2xl font-bold text-[#f4fff8] outline-none focus:border-[#00b875]"
                   value={editName}
                   onChange={(event) => setEditName(event.target.value)}
                   maxLength={80}
                 />
               ) : (
-                <h1 className="mt-2 truncate text-3xl font-bold">{collection.name}</h1>
+                <h1 className="truncate text-3xl font-bold">{collection.name}</h1>
               )}
-              <p className="mt-2 text-sm text-[#a9c8bf]">
+              <p className="text-sm text-[#a9c8bf]">
                 {collection.sources.length} {collection.sources.length === 1 ? 'folder' : 'folders'}{' '}
                 - {playableMedia.length} {playableMedia.length === 1 ? 'video' : 'videos'}
               </p>
@@ -609,11 +611,11 @@ export function CollectionDetailPage(): React.JSX.Element {
           </div>
 
           {pendingMedia.length > 0 && (
-            <section className="mt-8 rounded-xl border border-[#00b875]/25 bg-[#00b875]/[0.06] p-5">
+            <section className="rounded-xl border border-[#00b875]/25 bg-[#00b875]/[0.06] p-5">
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <h2 className="font-bold text-[#f4fff8]">New files found</h2>
-                  <p className="mt-1 text-sm text-[#a9c8bf]">
+                  <p className="text-sm text-[#a9c8bf]">
                     {pendingMedia.length} new {pendingMedia.length === 1 ? 'video' : 'videos'} need
                     confirmation before they enter the playlist.
                   </p>
@@ -648,8 +650,8 @@ export function CollectionDetailPage(): React.JSX.Element {
           )}
 
           {isEditing && !isSingleFolder && (
-            <section className="mt-10">
-              <h2 className="mb-4 text-lg font-bold">Collection settings</h2>
+            <section className="flex flex-col gap-4 pt-3">
+              <h2 className="text-lg font-bold">Collection settings</h2>
               <CollectionDataViewer
                 items={editSources}
                 getId={(source) => source.id}
@@ -695,15 +697,17 @@ export function CollectionDetailPage(): React.JSX.Element {
           )}
 
           {!isEditing && !isSingleFolder && (
-            <section className="mt-10">
-              <h2 className="mb-4 text-lg font-bold">Folders</h2>
+            <section className="flex flex-col gap-4 pt-3">
+              <h2 className="text-lg font-bold">Folders</h2>
               <CollectionDataViewer
                 items={collection.sources}
                 getId={(source) => source.id}
                 emptyState={
                   <div className="rounded-xl border border-dashed border-white/15 p-8 text-center text-[#a9c8bf]">
-                    <FolderOpen className="mx-auto mb-3" />
-                    No sources added yet.
+                    <div className="flex flex-col items-center gap-3">
+                      <FolderOpen />
+                      <span>No sources added yet.</span>
+                    </div>
                   </div>
                 }
                 renderItem={(source, viewMode) => (
@@ -727,7 +731,7 @@ export function CollectionDetailPage(): React.JSX.Element {
 
       {isAddSourceOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 px-4">
-          <div className="flex max-h-[86vh] w-full max-w-2xl flex-col rounded-xl border border-white/10 bg-[#171a1f] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.48)]">
+          <div className="flex max-h-[86vh] w-full max-w-2xl flex-col gap-5 rounded-xl border border-white/10 bg-[#171a1f] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.48)]">
             <div className="flex items-center justify-between gap-4">
               <h2 className="text-lg font-bold">Add source</h2>
               <button
@@ -739,7 +743,7 @@ export function CollectionDetailPage(): React.JSX.Element {
               </button>
             </div>
             <button
-              className="mt-5 rounded-xl border border-dashed border-white/20 bg-[#0d0f12]/70 px-4 py-8 text-left hover:border-[#00b875]/70"
+              className="rounded-xl border border-dashed border-white/20 bg-[#0d0f12]/70 px-4 py-8 text-left hover:border-[#00b875]/70"
               type="button"
               onClick={() => void chooseAddSourceFolder()}
               onDragOver={(event) => event.preventDefault()}
@@ -749,7 +753,7 @@ export function CollectionDetailPage(): React.JSX.Element {
                 <FolderOpen className="text-[#00d982]" size={22} />
                 <span className="min-w-0">
                   <span className="block font-semibold">Click or drag folders here</span>
-                  <span className="mt-1 block text-sm text-[#a9c8bf]">
+                  <span className="block text-sm text-[#a9c8bf]">
                     {addSourceDrafts.length > 0
                       ? `${addSourceDrafts.length} folder${addSourceDrafts.length === 1 ? '' : 's'} ready`
                       : 'Each selected folder becomes its own source.'}
@@ -758,7 +762,7 @@ export function CollectionDetailPage(): React.JSX.Element {
               </span>
             </button>
 
-            <div className="mt-4 min-h-0 space-y-3 overflow-y-auto pr-1">
+            <div className="flex min-h-0 flex-col gap-3 overflow-y-auto pr-1">
               {addSourceDrafts.map((sourceDraft) => (
                 <section
                   key={sourceDraft.sourcePath}
@@ -787,7 +791,7 @@ export function CollectionDetailPage(): React.JSX.Element {
                       />
                     </button>
                     <FolderOpen className="shrink-0 text-[#00d982]" size={19} />
-                    <div className="min-w-0 flex-1 space-y-2">
+                    <div className="flex min-w-0 flex-1 flex-col gap-2">
                       <input
                         className="w-full rounded-lg border border-white/15 bg-[#171a1f] px-3 py-2 text-sm font-bold text-[#f4fff8] outline-none placeholder:text-white/35 focus:border-[#00b875]"
                         value={sourceDraft.name}
@@ -805,7 +809,7 @@ export function CollectionDetailPage(): React.JSX.Element {
                         }
                       />
                       <p className="truncate text-xs text-[#a9c8bf]">{sourceDraft.sourcePath}</p>
-                      <p className="mt-0.5 text-xs text-[#a9c8bf]">
+                      <p className="text-xs text-[#a9c8bf]">
                         {sourceDraft.preview.length} videos found -{' '}
                         {sourceDraft.isDynamic
                           ? 'dynamic'
@@ -894,7 +898,7 @@ export function CollectionDetailPage(): React.JSX.Element {
                 </div>
               )}
             </div>
-            <div className="mt-5 flex justify-end gap-3">
+            <div className="flex justify-end gap-3">
               <button
                 className="rounded-lg px-4 py-2.5 font-semibold text-[#a9c8bf] hover:bg-white/5"
                 type="button"
@@ -926,7 +930,7 @@ export function CollectionDetailPage(): React.JSX.Element {
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 px-4">
           <div className="w-full max-w-lg rounded-xl border border-white/10 bg-[#171a1f] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.48)]">
             <h2 className="text-lg font-bold">Confirm new files</h2>
-            <div className="mt-4 max-h-72 overflow-y-auto rounded-lg border border-white/10">
+            <div className="max-h-72 overflow-y-auto rounded-lg border border-white/10">
               {pendingMedia.map((media) => (
                 <div
                   key={media.id}
@@ -937,7 +941,7 @@ export function CollectionDetailPage(): React.JSX.Element {
                 </div>
               ))}
             </div>
-            <div className="mt-5 flex justify-end gap-3">
+            <div className="flex justify-end gap-3">
               <button
                 className="rounded-lg px-4 py-2.5 font-semibold text-[#a9c8bf] hover:bg-white/5"
                 type="button"

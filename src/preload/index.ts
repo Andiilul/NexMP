@@ -7,7 +7,8 @@ const api: NexmpApi = {
   },
   profiles: {
     list: () => ipcRenderer.invoke('profiles:list'),
-    create: (input) => ipcRenderer.invoke('profiles:create', input)
+    create: (input) => ipcRenderer.invoke('profiles:create', input),
+    update: (input) => ipcRenderer.invoke('profiles:update', input)
   },
   collections: {
     list: (profileId) => ipcRenderer.invoke('collections:list', profileId),

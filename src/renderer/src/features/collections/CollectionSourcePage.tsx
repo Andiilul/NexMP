@@ -7,6 +7,7 @@ import type {
   MediaFile,
   SourceMediaOrder
 } from '../../../../shared/types/collection'
+import { useToast } from '../../components/useToast'
 import { createPlayablePlaylist, type PlayerRouteState } from './mediaPlayback'
 import {
   MediaFilesViewer,
@@ -19,6 +20,7 @@ export function CollectionSourcePage(): React.JSX.Element {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const location = useLocation()
+  const { warning } = useToast()
   const [collection, setCollection] = useState<CollectionWithSources | null>(null)
   const [source, setSource] = useState<CollectionSource | null>(null)
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([])
@@ -133,7 +135,7 @@ export function CollectionSourcePage(): React.JSX.Element {
   const playSource = (): void => {
     const playlist = createPlayablePlaylist(mediaFiles)
     if (playlist.length === 0) {
-      setError('This source does not have playable videos yet.')
+      warning('This source does not have playable videos yet.')
       return
     }
 
@@ -335,7 +337,7 @@ export function CollectionSourcePage(): React.JSX.Element {
   if (!source && !error) return <p className="text-[#a9c8bf]">Loading source...</p>
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="flex w-full max-w-6xl flex-col gap-7">
       <button
         className="inline-flex items-center gap-2 text-sm font-semibold text-[#a9c8bf] hover:text-[#f4fff8]"
         type="button"
@@ -346,27 +348,27 @@ export function CollectionSourcePage(): React.JSX.Element {
       </button>
 
       {error && (
-        <p className="mt-6 rounded-lg border border-[#ff6f60]/25 bg-[#3e1c1f]/60 px-4 py-3 text-sm text-[#ffaaa0]">
+        <p className="rounded-lg border border-[#ff6f60]/25 bg-[#3e1c1f]/60 px-4 py-3 text-sm text-[#ffaaa0]">
           {error}
         </p>
       )}
 
       {source && (
         <>
-          <div className="mt-7 flex items-end justify-between gap-5">
-            <div className="min-w-0 flex-1">
+          <div className="flex items-end justify-between gap-5">
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
               <p className="text-sm font-semibold text-[#00d982]">SOURCE</p>
               {isEditing ? (
                 <input
-                  className="mt-2 w-full max-w-xl rounded-lg border border-white/15 bg-[#0d0f12] px-4 py-3 text-2xl font-bold text-[#f4fff8] outline-none focus:border-[#00b875]"
+                  className="w-full max-w-xl rounded-lg border border-white/15 bg-[#0d0f12] px-4 py-3 text-2xl font-bold text-[#f4fff8] outline-none focus:border-[#00b875]"
                   value={editSourceName}
                   onChange={(event) => setEditSourceName(event.target.value)}
                   autoFocus
                 />
               ) : (
-                <h1 className="mt-2 truncate text-3xl font-bold">{source.name}</h1>
+                <h1 className="truncate text-3xl font-bold">{source.name}</h1>
               )}
-              <p className="mt-2 truncate text-sm text-[#a9c8bf]">
+              <p className="truncate text-sm text-[#a9c8bf]">
                 {source.sourcePath} - {playableMedia.length}{' '}
                 {playableMedia.length === 1 ? 'video' : 'videos'}
               </p>

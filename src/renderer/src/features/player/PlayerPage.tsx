@@ -910,8 +910,10 @@ export function PlayerPage(): React.JSX.Element {
               )}
 
               {error && (
-                <div className="z-10 mx-[22px] mb-3 self-end rounded-md border border-[#ff6f60]/25 bg-[#3e1c1f]/90 px-3 py-2.5 text-[13px] text-[#ffb8ae]">
-                  {error}
+                <div className="z-10 flex self-stretch justify-end px-[22px] pb-3">
+                  <div className="rounded-md border border-[#ff6f60]/25 bg-[#3e1c1f]/90 px-3 py-2.5 text-[13px] text-[#ffb8ae]">
+                    {error}
+                  </div>
                 </div>
               )}
 

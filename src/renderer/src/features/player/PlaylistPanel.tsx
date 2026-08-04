@@ -81,11 +81,11 @@ export function PlaylistPanel({
       ].join(' ')}
       aria-hidden={!isVisible}
     >
-      <header className="border-b border-white/10 px-4 py-4">
+      <header className="flex flex-col gap-0.5 border-b border-white/10 px-4 py-4">
         <h2 className="truncate text-sm font-bold text-[#f3f5fb]">
           {collectionName ?? 'Playlist'}
         </h2>
-        <p className="mt-0.5 text-xs text-[#ebeef8]/55">
+        <p className="text-xs text-[#ebeef8]/55">
           {playlist.length > 0 ? `${playlist.length} videos in temporary queue` : 'Temporary queue'}
         </p>
       </header>
@@ -147,7 +147,7 @@ export function PlaylistPanel({
                       <Film size={18} />
                     </button>
                     <button
-                      className="min-w-0 text-left"
+                      className="flex min-w-0 flex-col gap-0.5 text-left"
                       type="button"
                       onClick={() => onPlay(index, true)}
                     >
@@ -162,7 +162,7 @@ export function PlaylistPanel({
                           </span>
                         </span>
                       </span>
-                      <span className="mt-0.5 block overflow-hidden text-ellipsis whitespace-nowrap text-xs text-[#ebeef8]/55">
+                      <span className="block overflow-hidden text-ellipsis whitespace-nowrap text-xs text-[#ebeef8]/55">
                         {video.path}
                       </span>
                     </button>

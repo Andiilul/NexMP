@@ -67,7 +67,7 @@ export function CollectionCard({
         )}
         <span className="absolute inset-0 bg-black/0 transition group-hover:bg-black/20" />
       </button>
-      <div className={isGrid ? 'p-4' : 'min-w-0 flex-1'}>
+      <div className={isGrid ? 'flex flex-col gap-1 p-4' : 'flex min-w-0 flex-1 flex-col gap-1'}>
         <button
           className="block max-w-full truncate text-left font-bold text-[#f4fff8]"
           type="button"
@@ -76,16 +76,16 @@ export function CollectionCard({
         >
           {collection.name}
         </button>
-        <p className="mt-1 text-sm text-[#a9c8bf]">
+        <p className="text-sm text-[#a9c8bf]">
           {collection.sourceCount} {collection.sourceCount === 1 ? 'folder' : 'folders'} -{' '}
           {collection.videoCount} {collection.videoCount === 1 ? 'video' : 'videos'}
         </p>
-        <p className="mt-1 flex items-center gap-1 text-xs text-[#a9c8bf]/80">
+        <p className="flex items-center gap-1 text-xs text-[#a9c8bf]/80">
           <Star size={13} fill={collection.rating ? 'currentColor' : 'none'} />
           {collection.rating ?? 0}/10
         </p>
         {collection.updatedLabel && (
-          <p className="mt-1 text-xs text-[#a9c8bf]/65">{collection.updatedLabel}</p>
+          <p className="text-xs text-[#a9c8bf]/65">{collection.updatedLabel}</p>
         )}
       </div>
       <div
@@ -183,8 +183,8 @@ export function CollectionCard({
             </button>
           )}
           {onRate && (
-            <div className="border-t border-white/10 px-3 py-2">
-              <p className="mb-2 text-xs font-semibold text-[#a9c8bf]">Rating</p>
+            <div className="flex flex-col gap-2 border-t border-white/10 px-3 py-2">
+              <p className="text-xs font-semibold text-[#a9c8bf]">Rating</p>
               <div className="flex gap-1">
                 {Array.from({ length: 11 }, (_, rating) => rating).map((rating) => (
                   <button

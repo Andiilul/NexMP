@@ -95,7 +95,7 @@ export function VideoCard({
         <label
           className={
             isGrid
-              ? 'absolute z-10 m-2 grid h-7 w-7 place-items-center rounded-md bg-black/60'
+              ? 'absolute top-2 left-2 z-10 grid h-7 w-7 place-items-center rounded-md bg-black/60'
               : 'grid h-8 w-8 shrink-0 place-items-center rounded-md bg-black/25'
           }
           onClick={(event) => event.stopPropagation()}
@@ -155,12 +155,12 @@ export function VideoCard({
         )}
         {media.isMissing && <AlertTriangle size={isGrid ? 30 : 22} />}
       </div>
-      <div className={isGrid ? 'p-3' : 'min-w-0 flex-1'}>
+      <div className={isGrid ? 'flex flex-col gap-1 p-3' : 'flex min-w-0 flex-1 flex-col gap-1'}>
         <p className="truncate text-sm font-bold text-[#f4fff8]">{media.filename}</p>
-        <p className="mt-0.5 truncate text-xs text-[#a9c8bf]">{media.filePath}</p>
+        <p className="truncate text-xs text-[#a9c8bf]">{media.filePath}</p>
         {statusLabel && (
           <span
-            className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-black ${
+            className={`w-fit rounded-full px-2 py-0.5 text-[10px] font-black ${
               media.isMissing ? 'bg-[#ff6f60] text-[#220806]' : 'bg-[#00b875] text-[#04120d]'
             }`}
           >

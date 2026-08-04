@@ -2,7 +2,7 @@ import { MemoryRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { useEffect } from 'react'
 import { HomePage } from './features/home/HomePage'
 import { HomeLayout } from './features/home/HomeLayout'
-import { ContinueWatchingPage } from './features/home/ContinueWatchingPage'
+import { ContinueWatchingPage, TierListPage } from './features/home/ComingSoonPage'
 import { SettingsPage } from './features/home/SettingsPage'
 import { CollectionFormPage } from './features/collections/CollectionFormPage'
 import { CollectionDetailPage } from './features/collections/CollectionDetailPage'
@@ -52,6 +52,7 @@ function App(): React.JSX.Element {
                 element={<CollectionSourcePage />}
               />
               <Route path="continue" element={<ContinueWatchingPage />} />
+              <Route path="tier-list" element={<TierListPage />} />
               <Route path="tags" element={<TagsPage />} />
               <Route path="settings" element={<SettingsPage />} />
             </Route>
