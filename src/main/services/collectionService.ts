@@ -383,6 +383,7 @@ export function listCollectionMedia(collectionId: string): MediaFile[] {
       filename: mediaFiles.filename,
       extension: mediaFiles.extension,
       sizeBytes: mediaFiles.sizeBytes,
+      sortOrder: mediaFiles.sortOrder,
       modifiedAt: mediaFiles.modifiedAt,
       isMissing: mediaFiles.isMissing,
       isPending: mediaFiles.isPending,
@@ -432,6 +433,7 @@ export function listCollectionMedia(collectionId: string): MediaFile[] {
       filename: media.filename,
       extension: media.extension,
       sizeBytes: media.sizeBytes,
+      sortOrder: media.sortOrder,
       modifiedAt: media.modifiedAt,
       isMissing: media.isMissing,
       isPending: media.isPending,
@@ -677,12 +679,51 @@ export function updateMediaFiles(
   return listCollectionMedia(collectionId)
 }
 
+export function deleteMediaFiles(collectionId: string, mediaIds: string[]): MediaFile[] {
+  const database = getDatabase()
+  const existingMedia = listCollectionMedia(collectionId)
+  const mediaById = new Map(existingMedia.map((media) => [media.id, media]))
+  const uniqueMediaIds = [...new Set(mediaIds)]
+
+  for (const mediaId of uniqueMediaIds) {
+    if (!mediaById.has(mediaId)) throw new Error('Media file not found in this collection.')
+    database.delete(mediaFiles).where(eq(mediaFiles.id, mediaId)).run()
+  }
+
+  const affectedSourceIds = [
+    ...new Set(
+      uniqueMediaIds
+        .map((mediaId) => mediaById.get(mediaId)?.collectionSourceId)
+        .filter((sourceId): sourceId is string => Boolean(sourceId))
+    )
+  ]
+
+  for (const sourceId of affectedSourceIds) {
+    const remainingMedia = database
+      .select()
+      .from(mediaFiles)
+      .where(eq(mediaFiles.collectionSourceId, sourceId))
+      .orderBy(asc(mediaFiles.sortOrder))
+      .all()
+
+    remainingMedia.forEach((media, sortOrder) => {
+      database
+        .update(mediaFiles)
+        .set({ sortOrder, updatedAt: new Date().toISOString() })
+        .where(eq(mediaFiles.id, media.id))
+        .run()
+    })
+  }
+
+  return listCollectionMedia(collectionId)
+}
+
 export function deleteCollection(collectionId: string): void {
   getDatabase().delete(collections).where(eq(collections.id, collectionId)).run()
 }
 
 export function createTag(profileId: string, name: string, color: string): Tag {
-  const normalizedName = normalizeName(name)
+  const normalizedName = normalizeName(name).toLocaleLowerCase()
   if (!normalizedName) throw new Error('Tag name is required.')
   if (!/^#[0-9a-fA-F]{6}$/.test(color)) throw new Error('A valid tag color is required.')
   const database = getDatabase()
@@ -698,6 +739,10 @@ export function createTag(profileId: string, name: string, color: string): Tag {
   const tag = database.select().from(tags).where(eq(tags.id, id)).get()
   if (!tag) throw new Error('Could not create tag.')
   return tag
+}
+
+export function deleteTag(tagId: string): void {
+  getDatabase().delete(tags).where(eq(tags.id, tagId)).run()
 }
 
 export function searchCollections(

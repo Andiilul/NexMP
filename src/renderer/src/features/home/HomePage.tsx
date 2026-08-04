@@ -4,6 +4,8 @@ import {
   FolderPlus,
   Pin,
   Play,
+  Search,
+  SearchX,
   Star,
   Text,
   Trash2,
@@ -11,16 +13,22 @@ import {
   ZoomIn,
   ZoomOut
 } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
-import { useLocation, useNavigate, useOutletContext } from 'react-router-dom'
-import type { CollectionWithSources, MediaFile } from '../../../../shared/types/collection'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom'
+import type { CollectionSearchResult, MediaFile, Tag } from '../../../../shared/types/collection'
 import { CollectionCard } from '../collections/CollectionCard'
 import type { CollectionCardData } from '../collections/types'
 import { createPlayablePlaylist, type PlayerRouteState } from '../collections/mediaPlayback'
+import { useAppState } from '../../components/useAppState'
+import { formatTagName } from '../tags/tagDisplay'
 
 type HomeLayoutContext = { openCollectionDialog: () => void }
-type CollectionWithVideoCount = CollectionWithSources & { videoCount: number }
+type HomeCollection = CollectionSearchResult & {
+  videoCount: number
+  mediaForCollection: MediaFile[]
+}
 type SortBy = 'date' | 'name' | 'rating'
+type TagMatchMode = 'all' | 'any'
 
 const HOME_COLLECTION_TILE_ZOOM_LEVELS = [
   { label: 'Compact', width: 176, skeletonHeight: 244 },
@@ -34,50 +42,76 @@ const DEFAULT_HOME_COLLECTION_TILE_ZOOM_INDEX = 1
 export function HomePage(): React.JSX.Element {
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { openCollectionDialog } = useOutletContext<HomeLayoutContext>()
-  const [collections, setCollections] = useState<CollectionWithVideoCount[]>([])
+  const [collections, setCollections] = useState<HomeCollection[]>([])
+  const [tags, setTags] = useState<Tag[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
+  const [tagMatchMode, setTagMatchMode] = useState<TagMatchMode>('all')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [renameCollection, setRenameCollection] = useState<CollectionWithVideoCount | null>(null)
-  const [deleteCollection, setDeleteCollection] = useState<CollectionWithVideoCount | null>(null)
+  const [renameCollection, setRenameCollection] = useState<HomeCollection | null>(null)
+  const [deleteCollection, setDeleteCollection] = useState<HomeCollection | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [isSavingAction, setIsSavingAction] = useState(false)
   const [sortBy, setSortBy] = useState<SortBy>('date')
   const [isPinnedOpen, setIsPinnedOpen] = useState(true)
-  const [pinViewMode, setPinViewMode] = useState<'section' | 'inline'>('section')
+  const {
+    appState: { pinOnTop },
+    togglePinOnTop
+  } = useAppState()
   const [tileZoomIndex, setTileZoomIndex] = useState(DEFAULT_HOME_COLLECTION_TILE_ZOOM_INDEX)
-  const [playPickerCollection, setPlayPickerCollection] = useState<CollectionWithVideoCount | null>(
-    null
-  )
+  const [playPickerCollection, setPlayPickerCollection] = useState<HomeCollection | null>(null)
   const [playPickerMedia, setPlayPickerMedia] = useState<MediaFile[]>([])
   const [selectedPlayPickerMediaIds, setSelectedPlayPickerMediaIds] = useState<string[]>([])
   const [isPlayPickerLoading, setIsPlayPickerLoading] = useState(false)
   const returnTo = `${location.pathname}${location.search}`
 
-  const fetchCollections = useCallback(async (): Promise<CollectionWithVideoCount[]> => {
+  const selectedTagIds = useMemo(
+    () =>
+      (searchParams.get('tags') ?? '')
+        .split(',')
+        .map((tagId) => tagId.trim())
+        .filter(Boolean),
+    [searchParams]
+  )
+
+  const fetchCollections = useCallback(async (): Promise<{
+    collections: HomeCollection[]
+    tags: Tag[]
+  }> => {
     const profileId = sessionStorage.getItem('nexmp.active-profile-id')
     if (!profileId) {
       navigate('/')
-      return []
+      return { collections: [], tags: [] }
     }
 
     const collectionApi = window.api?.collections
     if (!collectionApi) throw new Error('Collection service is unavailable. Please restart NexMP.')
 
-    const items = await collectionApi.list(profileId)
-    const mediaLists = await Promise.all(
-      items.map((collection) => collectionApi.listMedia(collection.id))
-    )
+    const [items, nextTags] = await Promise.all([
+      collectionApi.search(profileId, '', []),
+      collectionApi.listTags(profileId)
+    ])
 
-    return items.map((collection, index) => ({
-      ...collection,
-      videoCount:
-        mediaLists[index]?.filter((media) => !media.isMissing && !media.isPending).length ?? 0
-    }))
+    return {
+      collections: items.map((collection) => {
+        const mediaForCollection = collection.mediaForCollection ?? []
+        return {
+          ...collection,
+          mediaForCollection,
+          videoCount: mediaForCollection.filter((media) => !media.isMissing && !media.isPending)
+            .length
+        }
+      }),
+      tags: nextTags ?? []
+    }
   }, [navigate])
 
   const reloadCollections = async (): Promise<void> => {
-    setCollections(await fetchCollections())
+    const nextLibrary = await fetchCollections()
+    setCollections(nextLibrary.collections)
+    setTags(nextLibrary.tags)
   }
 
   useEffect(() => {
@@ -85,9 +119,10 @@ export function HomePage(): React.JSX.Element {
 
     const load = async (): Promise<void> => {
       try {
-        const nextCollections = await fetchCollections()
+        const nextLibrary = await fetchCollections()
         if (!isMounted) return
-        setCollections(nextCollections)
+        setCollections(nextLibrary.collections)
+        setTags(nextLibrary.tags)
       } catch (reason) {
         if (!isMounted) return
         setError(reason instanceof Error ? reason.message : 'Unable to load collections.')
@@ -246,8 +281,8 @@ export function HomePage(): React.JSX.Element {
   }
 
   const compareCollections = (
-    firstCollection: CollectionWithVideoCount,
-    secondCollection: CollectionWithVideoCount
+    firstCollection: HomeCollection,
+    secondCollection: HomeCollection
   ): number => {
     if (sortBy === 'name') {
       return firstCollection.name.localeCompare(secondCollection.name, undefined, {
@@ -272,11 +307,46 @@ export function HomePage(): React.JSX.Element {
     )
   }
 
-  const sortedCollections = [...collections].sort(compareCollections)
+  const tagCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    collections.forEach((collection) => {
+      collection.tags.forEach((tag) => counts.set(tag.id, (counts.get(tag.id) ?? 0) + 1))
+    })
+    return counts
+  }, [collections])
+
+  const filteredCollections = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase()
+    const selectedTags = new Set(selectedTagIds)
+
+    return collections.filter((collection) => {
+      const searchableText = [
+        collection.name,
+        ...collection.sources.map((source) => source.name),
+        ...collection.mediaForCollection.map((media) => media.filename),
+        ...collection.tags.map((tag) => tag.name)
+      ]
+        .join(' ')
+        .toLocaleLowerCase()
+
+      const matchesQuery = !normalizedQuery || searchableText.includes(normalizedQuery)
+      const collectionTagIds = new Set(collection.tags.map((tag) => tag.id))
+      const matchesTags =
+        selectedTags.size === 0 ||
+        (tagMatchMode === 'all'
+          ? selectedTagIds.every((tagId) => collectionTagIds.has(tagId))
+          : selectedTagIds.some((tagId) => collectionTagIds.has(tagId)))
+
+      return matchesQuery && matchesTags
+    })
+  }, [collections, searchQuery, selectedTagIds, tagMatchMode])
+
+  const sortedCollections = [...filteredCollections].sort(compareCollections)
   const pinnedCollections = sortedCollections.filter((collection) => collection.isPinned)
   const unpinnedCollections = sortedCollections.filter((collection) => !collection.isPinned)
-  const visibleCollections =
-    pinViewMode === 'inline' ? [...pinnedCollections, ...unpinnedCollections] : unpinnedCollections
+  const visibleCollections = pinOnTop
+    ? unpinnedCollections
+    : [...pinnedCollections, ...unpinnedCollections]
   const tileZoom = HOME_COLLECTION_TILE_ZOOM_LEVELS[tileZoomIndex]
 
   const zoomOutCollectionTiles = (): void => {
@@ -293,6 +363,26 @@ export function HomePage(): React.JSX.Element {
     navigate(`/home/collections/${collectionId}${search}`)
   }
 
+  const setSelectedTagIds = (tagIds: string[]): void => {
+    const nextSearchParams = new URLSearchParams(searchParams)
+    if (tagIds.length > 0) {
+      nextSearchParams.set('tags', tagIds.join(','))
+    } else {
+      nextSearchParams.delete('tags')
+    }
+    setSearchParams(nextSearchParams, { replace: true })
+  }
+
+  const toggleTagFilter = (tagId: string): void => {
+    setSelectedTagIds(
+      selectedTagIds.includes(tagId)
+        ? selectedTagIds.filter((selectedTagId) => selectedTagId !== tagId)
+        : [...selectedTagIds, tagId]
+    )
+  }
+
+  const hasActiveFilters = searchQuery.trim() || selectedTagIds.length > 0
+
   const isCollectionCardActionTarget = (eventTarget: EventTarget): boolean => {
     return (
       eventTarget instanceof HTMLElement &&
@@ -300,7 +390,7 @@ export function HomePage(): React.JSX.Element {
     )
   }
 
-  const renderCollectionTile = (collection: CollectionWithVideoCount): React.JSX.Element => (
+  const renderCollectionTile = (collection: HomeCollection): React.JSX.Element => (
     <div
       key={collection.id}
       className="rounded-2xl border border-transparent p-2 transition hover:bg-white/[0.04]"
@@ -359,6 +449,102 @@ export function HomePage(): React.JSX.Element {
         </button>
       </div>
 
+      <section className="mt-8 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4">
+        <label className="flex items-center gap-3 rounded-xl border border-white/[0.08] bg-[#0d0f12] px-4 py-3 text-[#a9c8bf] focus-within:border-[#00b875]/70">
+          <Search size={19} />
+          <input
+            className="w-full bg-transparent text-sm text-[#f4fff8] outline-none placeholder:text-[#a9c8bf]/60"
+            placeholder="Search collections, folders, tags, and videos"
+            aria-label="Search collections, folders, tags, and videos"
+            data-nexmp-search-target="true"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+          />
+          {searchQuery && (
+            <button
+              className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-[#a9c8bf] transition hover:bg-white/5 hover:text-[#f4fff8]"
+              type="button"
+              onClick={() => setSearchQuery('')}
+              aria-label="Clear search"
+            >
+              <X size={16} />
+            </button>
+          )}
+        </label>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="mr-1 text-xs font-bold uppercase tracking-wide text-[#a9c8bf]">
+              Filter tags
+            </span>
+            {isLoading ? (
+              <span className="text-sm text-[#a9c8bf]/70">Loading tags...</span>
+            ) : tags.length === 0 ? (
+              <span className="text-sm text-[#a9c8bf]/70">No tags yet.</span>
+            ) : (
+              tags.map((tag) => {
+                const isSelected = selectedTagIds.includes(tag.id)
+                return (
+                  <button
+                    key={tag.id}
+                    className={`rounded-full border px-3 py-1.5 text-sm font-semibold transition ${
+                      isSelected
+                        ? 'border-transparent text-[#04120d]'
+                        : 'border-white/15 text-[#a9c8bf] hover:border-white/30 hover:text-[#f4fff8]'
+                    }`}
+                    style={isSelected ? { backgroundColor: tag.color } : undefined}
+                    type="button"
+                    onClick={() => toggleTagFilter(tag.id)}
+                  >
+                    <span
+                      className="mr-2 inline-block h-2 w-2 rounded-full"
+                      style={{ backgroundColor: tag.color }}
+                    />
+                    {formatTagName(tag.name)}
+                    <span className="ml-2 opacity-70">{tagCounts.get(tag.id) ?? 0}</span>
+                  </button>
+                )
+              })
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {selectedTagIds.length > 1 && (
+              <div className="inline-flex overflow-hidden rounded-lg border border-white/10">
+                {[
+                  { value: 'all' as const, label: 'All selected tags' },
+                  { value: 'any' as const, label: 'Any selected tag' }
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    className={`px-3 py-2 text-xs font-bold transition ${
+                      tagMatchMode === option.value
+                        ? 'bg-[#00b875]/15 text-[#00d982]'
+                        : 'text-[#a9c8bf] hover:bg-white/5 hover:text-[#f4fff8]'
+                    }`}
+                    type="button"
+                    onClick={() => setTagMatchMode(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {hasActiveFilters && (
+              <button
+                className="rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-[#a9c8bf] transition hover:bg-white/5 hover:text-[#f4fff8]"
+                type="button"
+                onClick={() => {
+                  setSearchQuery('')
+                  setSelectedTagIds([])
+                }}
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+        </div>
+      </section>
+
       {isLoading && (
         <section className="mt-10 flex flex-wrap items-start" aria-label="Loading collections">
           {[1, 2, 3].map((item) => (
@@ -394,10 +580,25 @@ export function HomePage(): React.JSX.Element {
         </section>
       )}
 
-      {!isLoading && !error && collections.length > 0 && (
+      {!isLoading && !error && collections.length > 0 && filteredCollections.length === 0 && (
+        <section className="mt-10 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-8 py-14 text-center">
+          <SearchX className="mx-auto text-[#a9c8bf]" size={30} />
+          <h2 className="mt-4 text-xl font-bold">No collections matched</h2>
+          <p className="mt-2 text-sm text-[#a9c8bf]">
+            Try another keyword, clear a tag, or switch the tag match mode.
+          </p>
+        </section>
+      )}
+
+      {!isLoading && !error && filteredCollections.length > 0 && (
         <section className="mt-10">
           <div className="mb-4 flex items-center justify-between gap-4">
-            <h2 className="text-lg font-bold">Collections</h2>
+            <h2 className="text-lg font-bold">
+              Collections{' '}
+              <span className="text-sm font-semibold text-[#a9c8bf]">
+                ({filteredCollections.length})
+              </span>
+            </h2>
             <div className="flex flex-wrap items-center gap-2">
               <div className="inline-flex items-center overflow-hidden rounded-lg border border-white/10">
                 <button
@@ -424,14 +625,12 @@ export function HomePage(): React.JSX.Element {
               </div>
               <button
                 className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-bold transition ${
-                  pinViewMode === 'section'
+                  pinOnTop
                     ? 'border-[#00b875] bg-[#00b875]/15 text-[#00d982]'
                     : 'border-white/10 text-[#a9c8bf] hover:bg-white/5 hover:text-[#f4fff8]'
                 }`}
                 type="button"
-                onClick={() =>
-                  setPinViewMode((current) => (current === 'section' ? 'inline' : 'section'))
-                }
+                onClick={togglePinOnTop}
               >
                 <Pin size={16} />
                 Pin on top
@@ -458,7 +657,7 @@ export function HomePage(): React.JSX.Element {
               ))}
             </div>
           </div>
-          {pinViewMode === 'section' && pinnedCollections.length > 0 && (
+          {pinOnTop && pinnedCollections.length > 0 && (
             <div className="mb-9">
               <button
                 className="mb-3 flex w-full items-center justify-between rounded-lg border border-white/10 px-3 py-2 text-left text-sm font-bold text-[#00d982] transition hover:bg-white/5"
@@ -483,7 +682,7 @@ export function HomePage(): React.JSX.Element {
           )}
           {visibleCollections.length > 0 && (
             <div>
-              {pinViewMode === 'section' && pinnedCollections.length > 0 && (
+              {pinOnTop && pinnedCollections.length > 0 && (
                 <h3 className="mb-3 text-sm font-bold text-[#a9c8bf]">All collections</h3>
               )}
               <div className="flex flex-wrap items-start">

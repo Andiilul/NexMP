@@ -39,6 +39,7 @@ export type MediaFile = {
   filename: string
   extension: string
   sizeBytes: number
+  sortOrder: number
   modifiedAt: string | null
   isMissing: boolean
   isPending: boolean
@@ -54,7 +55,10 @@ export type Tag = {
   updatedAt: string
 }
 
-export type CollectionSearchResult = CollectionWithSources & { tags: Tag[] }
+export type CollectionSearchResult = CollectionWithSources & {
+  tags: Tag[]
+  mediaForCollection?: MediaFile[]
+}
 
 export type SourceMediaPreview = {
   filePath: string
@@ -134,8 +138,10 @@ export type CollectionApi = {
   confirmPendingMedia: (collectionId: string) => Promise<MediaFile[]>
   addMedia: (input: AddSourceMediaInput) => Promise<MediaFile[]>
   updateMedia: (collectionId: string, media: UpdateMediaFileInput[]) => Promise<MediaFile[]>
+  deleteMedia: (collectionId: string, mediaIds: string[]) => Promise<MediaFile[]>
   listTags: (profileId: string) => Promise<Tag[]>
   createTag: (profileId: string, name: string, color: string) => Promise<Tag>
+  deleteTag: (tagId: string) => Promise<void>
   listMedia: (collectionId: string) => Promise<MediaFile[]>
   listSourceMedia: (sourceId: string) => Promise<MediaFile[]>
 }

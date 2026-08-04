@@ -1,12 +1,21 @@
-import { ArrowLeft, FolderOpen, Plus, X } from 'lucide-react'
+import { ArrowLeft, ChevronDown, FolderOpen, Plus, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { SourceMediaPreview, Tag } from '../../../../shared/types/collection'
+import { formatTagName } from '../tags/tagDisplay'
 
 type SourceDraft = {
+  name: string
   sourcePath: string
   preview: SourceMediaPreview[]
   selectedFilePaths: string[]
+  isDynamic: boolean
+  isPreviewOpen: boolean
+}
+
+function getFolderName(sourcePath: string): string {
+  const parts = sourcePath.split(/[\\/]/).filter(Boolean)
+  return parts.at(-1) ?? sourcePath
 }
 
 export function CollectionFormPage(): React.JSX.Element {
@@ -17,9 +26,7 @@ export function CollectionFormPage(): React.JSX.Element {
   const [tags, setTags] = useState<Tag[]>([])
   const [tagIds, setTagIds] = useState<string[]>([])
   const [newTagName, setNewTagName] = useState('')
-  const [sourceDynamic, setSourceDynamic] = useState(true)
   const [sources, setSources] = useState<SourceDraft[]>([])
-  const [reviewSourcePath, setReviewSourcePath] = useState<string | null>(null)
 
   useEffect(() => {
     const profileId = sessionStorage.getItem('nexmp.active-profile-id')
@@ -37,13 +44,16 @@ export function CollectionFormPage(): React.JSX.Element {
     setNewTagName('')
   }
 
-  const previewStaticSource = async (sourcePath: string): Promise<SourceDraft> => {
+  const previewSource = async (sourcePath: string): Promise<SourceDraft> => {
     const preview = await window.api?.collections.previewSourceMedia(sourcePath)
 
     return {
+      name: getFolderName(sourcePath),
       sourcePath,
       preview: preview ?? [],
-      selectedFilePaths: (preview ?? []).map((media) => media.filePath)
+      selectedFilePaths: (preview ?? []).map((media) => media.filePath),
+      isDynamic: true,
+      isPreviewOpen: false
     }
   }
 
@@ -54,34 +64,12 @@ export function CollectionFormPage(): React.JSX.Element {
       if (!selectedPaths || selectedPaths.length === 0) return
       const existingPaths = new Set(sources.map((source) => source.sourcePath))
       const nextPaths = selectedPaths.filter((sourcePath) => !existingPaths.has(sourcePath))
-      const nextSources = sourceDynamic
-        ? nextPaths.map((sourcePath) => ({ sourcePath, preview: [], selectedFilePaths: [] }))
-        : await Promise.all(nextPaths.map((sourcePath) => previewStaticSource(sourcePath)))
+      const nextSources = await Promise.all(
+        nextPaths.map((sourcePath) => previewSource(sourcePath))
+      )
       setSources((current) => [...current, ...nextSources])
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to select source folders.')
-    }
-  }
-
-  const changeSourceMode = async (isDynamic: boolean): Promise<void> => {
-    setSourceDynamic(isDynamic)
-    if (isDynamic) return
-
-    try {
-      setError(null)
-      const missingPreviewSources = sources.filter((source) => source.preview.length === 0)
-      const previewedSources = await Promise.all(
-        missingPreviewSources.map((source) => previewStaticSource(source.sourcePath))
-      )
-      setSources((current) =>
-        current.map(
-          (source) =>
-            previewedSources.find((previewed) => previewed.sourcePath === source.sourcePath) ??
-            source
-        )
-      )
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to preview source files.')
     }
   }
 
@@ -104,12 +92,13 @@ export function CollectionFormPage(): React.JSX.Element {
         profileId,
         name,
         sourcePaths: sources.map((source) => source.sourcePath),
-        sourceDynamic,
+        sourceDynamic: true,
         tagIds,
         sources: sources.map((source) => ({
+          name: source.name,
           sourcePath: source.sourcePath,
-          isDynamic: sourceDynamic,
-          includedFilePaths: sourceDynamic ? undefined : source.selectedFilePaths
+          isDynamic: source.isDynamic,
+          includedFilePaths: source.isDynamic ? undefined : source.selectedFilePaths
         }))
       })
       navigate('/home')
@@ -173,44 +162,130 @@ export function CollectionFormPage(): React.JSX.Element {
             ) : (
               <div className="mt-2 space-y-2">
                 {sources.map((source) => (
-                  <div
+                  <section
                     key={source.sourcePath}
-                    className="flex items-center gap-3 rounded-lg border border-white/10 bg-[#0d0f12]/60 px-3 py-2.5"
+                    className="rounded-lg border border-white/10 bg-[#0d0f12]/60"
                   >
-                    <FolderOpen className="shrink-0 text-[#00d982]" size={18} />
-                    <div className="min-w-0 flex-1">
-                      <span className="block truncate text-sm text-[#a9c8bf]">
-                        {source.sourcePath}
-                      </span>
-                      {!sourceDynamic && (
-                        <span className="mt-0.5 block text-xs text-[#a9c8bf]/65">
-                          {source.selectedFilePaths.length} of {source.preview.length} videos
-                          included
-                        </span>
-                      )}
-                    </div>
-                    {!sourceDynamic && (
+                    <div className="flex items-center gap-3 px-3 py-2.5">
                       <button
-                        className="rounded-md border border-white/10 px-3 py-1.5 text-xs font-semibold text-[#f4fff8] hover:bg-white/5"
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-[#a9c8bf] hover:bg-white/5"
                         type="button"
-                        onClick={() => setReviewSourcePath(source.sourcePath)}
+                        onClick={() =>
+                          setSources((current) =>
+                            current.map((item) =>
+                              item.sourcePath === source.sourcePath
+                                ? { ...item, isPreviewOpen: !item.isPreviewOpen }
+                                : item
+                            )
+                          )
+                        }
                       >
-                        Review
+                        <ChevronDown
+                          className={`transition-transform ${
+                            source.isPreviewOpen ? 'rotate-0' : '-rotate-90'
+                          }`}
+                          size={17}
+                        />
                       </button>
+                      <FolderOpen className="shrink-0 text-[#00d982]" size={18} />
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <input
+                          className="w-full rounded-lg border border-white/15 bg-[#171a1f] px-3 py-2 text-sm font-bold text-[#f4fff8] outline-none placeholder:text-white/35 focus:border-[#00b875]"
+                          value={source.name}
+                          placeholder="Source name"
+                          maxLength={80}
+                          onChange={(event) =>
+                            setSources((current) =>
+                              current.map((item) =>
+                                item.sourcePath === source.sourcePath
+                                  ? { ...item, name: event.target.value }
+                                  : item
+                              )
+                            )
+                          }
+                        />
+                        <span className="block truncate text-xs text-[#a9c8bf]">
+                          {source.sourcePath}
+                        </span>
+                        <span className="mt-0.5 block text-xs text-[#a9c8bf]/65">
+                          {source.preview.length} videos -{' '}
+                          {source.isDynamic
+                            ? 'dynamic'
+                            : `${source.selectedFilePaths.length} included`}
+                        </span>
+                      </div>
+                      <label className="flex shrink-0 items-center gap-2 rounded-md border border-white/10 px-3 py-1.5 text-xs font-semibold text-[#f4fff8]">
+                        Dynamic
+                        <input
+                          className="h-4 w-4 accent-[#00b875]"
+                          type="checkbox"
+                          checked={source.isDynamic}
+                          onChange={(event) =>
+                            setSources((current) =>
+                              current.map((item) =>
+                                item.sourcePath === source.sourcePath
+                                  ? { ...item, isDynamic: event.target.checked }
+                                  : item
+                              )
+                            )
+                          }
+                        />
+                      </label>
+                      <button
+                        className="grid h-8 w-8 place-items-center rounded-md text-[#a9c8bf] transition hover:bg-white/5 hover:text-[#ffaaa0]"
+                        type="button"
+                        onClick={() =>
+                          setSources((current) =>
+                            current.filter((item) => item.sourcePath !== source.sourcePath)
+                          )
+                        }
+                        aria-label={`Remove ${source.sourcePath}`}
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                    {source.isPreviewOpen && (
+                      <div className="max-h-56 overflow-y-auto border-t border-white/10">
+                        {source.preview.map((media) => (
+                          <label
+                            key={media.filePath}
+                            className="flex items-center gap-3 border-b border-white/[0.06] px-3 py-2.5 last:border-b-0"
+                          >
+                            <input
+                              className="h-4 w-4 accent-[#00b875] disabled:opacity-35"
+                              type="checkbox"
+                              disabled={source.isDynamic}
+                              checked={
+                                source.isDynamic ||
+                                source.selectedFilePaths.includes(media.filePath)
+                              }
+                              onChange={(event) => {
+                                setSources((current) =>
+                                  current.map((item) => {
+                                    if (item.sourcePath !== source.sourcePath) return item
+                                    const selectedFilePaths = event.target.checked
+                                      ? [...new Set([...item.selectedFilePaths, media.filePath])]
+                                      : item.selectedFilePaths.filter(
+                                          (path) => path !== media.filePath
+                                        )
+                                    return { ...item, selectedFilePaths }
+                                  })
+                                )
+                              }}
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-semibold">
+                                {media.filename}
+                              </span>
+                              <span className="block truncate text-xs text-[#a9c8bf]">
+                                {media.filePath}
+                              </span>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
                     )}
-                    <button
-                      className="grid h-8 w-8 place-items-center rounded-md text-[#a9c8bf] transition hover:bg-white/5 hover:text-[#ffaaa0]"
-                      type="button"
-                      onClick={() =>
-                        setSources((current) =>
-                          current.filter((item) => item.sourcePath !== source.sourcePath)
-                        )
-                      }
-                      aria-label={`Remove ${source.sourcePath}`}
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
+                  </section>
                 ))}
                 <button
                   className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-3 py-2 text-sm font-semibold text-[#f4fff8] transition hover:bg-white/5"
@@ -222,20 +297,6 @@ export function CollectionFormPage(): React.JSX.Element {
                 </button>
               </div>
             )}
-            <label className="mt-4 flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3">
-              <span>
-                <span className="block text-sm font-semibold text-[#f4fff8]">Dynamic source</span>
-                <span className="mt-0.5 block text-xs text-[#a9c8bf]">
-                  Existing videos are imported now. Future rescans show new files for confirmation.
-                </span>
-              </span>
-              <input
-                className="h-5 w-5 accent-[#00b875]"
-                type="checkbox"
-                checked={sourceDynamic}
-                onChange={(event) => void changeSourceMode(event.target.checked)}
-              />
-            </label>
           </div>
           <div className="mt-7">
             <p className="text-sm font-semibold">
@@ -256,7 +317,7 @@ export function CollectionFormPage(): React.JSX.Element {
                     )
                   }
                 >
-                  {tag.name}
+                  {formatTagName(tag.name)}
                 </button>
               ))}
             </div>
@@ -290,81 +351,13 @@ export function CollectionFormPage(): React.JSX.Element {
             <button
               className="rounded-lg bg-[#00b875] px-5 py-2.5 font-bold text-[#04120d] transition hover:bg-[#00d982] disabled:opacity-50"
               type="submit"
-              disabled={!name.trim() || isCreating}
+              disabled={!name.trim() || sources.some((source) => !source.name.trim()) || isCreating}
             >
               {isCreating ? 'Creating...' : 'Create Collection'}
             </button>
           </div>
         </form>
       </div>
-      {reviewSourcePath && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 px-4">
-          <div className="flex max-h-[82vh] w-full max-w-2xl flex-col rounded-xl border border-white/10 bg-[#171a1f] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.48)]">
-            <div className="flex items-center justify-between gap-4">
-              <div className="min-w-0">
-                <h2 className="text-lg font-bold">Include videos</h2>
-                <p className="mt-1 truncate text-sm text-[#a9c8bf]">{reviewSourcePath}</p>
-              </div>
-              <button
-                className="grid h-8 w-8 place-items-center rounded-md text-[#a9c8bf] hover:bg-white/5 hover:text-[#f4fff8]"
-                type="button"
-                onClick={() => setReviewSourcePath(null)}
-              >
-                <X size={17} />
-              </button>
-            </div>
-            <div className="mt-5 min-h-0 overflow-y-auto rounded-lg border border-white/10">
-              {sources
-                .find((source) => source.sourcePath === reviewSourcePath)
-                ?.preview.map((media) => {
-                  const source = sources.find((item) => item.sourcePath === reviewSourcePath)
-                  const checked = source?.selectedFilePaths.includes(media.filePath) ?? false
-
-                  return (
-                    <label
-                      key={media.filePath}
-                      className="flex items-center gap-3 border-b border-white/[0.06] px-3 py-2.5 last:border-b-0"
-                    >
-                      <input
-                        className="h-4 w-4 accent-[#00b875]"
-                        type="checkbox"
-                        checked={checked}
-                        onChange={(event) => {
-                          setSources((current) =>
-                            current.map((item) => {
-                              if (item.sourcePath !== reviewSourcePath) return item
-                              const selectedFilePaths = event.target.checked
-                                ? [...new Set([...item.selectedFilePaths, media.filePath])]
-                                : item.selectedFilePaths.filter((path) => path !== media.filePath)
-                              return { ...item, selectedFilePaths }
-                            })
-                          )
-                        }}
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold">
-                          {media.filename}
-                        </span>
-                        <span className="block truncate text-xs text-[#a9c8bf]">
-                          {media.filePath}
-                        </span>
-                      </span>
-                    </label>
-                  )
-                })}
-            </div>
-            <div className="mt-5 flex justify-end">
-              <button
-                className="rounded-lg bg-[#00b875] px-4 py-2.5 font-bold text-[#04120d]"
-                type="button"
-                onClick={() => setReviewSourcePath(null)}
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

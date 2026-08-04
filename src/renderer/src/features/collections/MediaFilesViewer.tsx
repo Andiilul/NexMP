@@ -1,4 +1,4 @@
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import type { MediaFile, SourceMediaOrder } from '../../../../shared/types/collection'
 import { Modal } from '../../components/Modal'
@@ -29,6 +29,8 @@ type MediaFilesViewerProps = {
   onOrderChange?: (orderBy: SourceMediaOrder) => Promise<void> | void
   onMove?: (mediaId: string, direction: -1 | 1) => void
   onRenameDraft?: (mediaId: string, filename: string) => void
+  onRenameSave?: (mediaId: string, filename: string) => Promise<void> | void
+  onDeleteMedia?: (mediaIds: string[]) => Promise<void> | void
   onSmartRenameSave?: (renames: SmartRenameSaveInput[]) => Promise<void> | void
 }
 
@@ -395,12 +397,18 @@ export function MediaFilesViewer({
   onOrderChange,
   onMove,
   onRenameDraft,
+  onRenameSave,
+  onDeleteMedia,
   onSmartRenameSave
 }: MediaFilesViewerProps): React.JSX.Element {
   const toast = useToast()
-  const [renameMedia, setRenameMedia] = useState<MediaEditDraft | null>(null)
+  const [renameMedia, setRenameMedia] = useState<MediaEditDraft | MediaFile | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [renameExtension, setRenameExtension] = useState('')
+  const [isSavingRename, setIsSavingRename] = useState(false)
+  const [deleteMediaIds, setDeleteMediaIds] = useState<string[]>([])
+  const [selectedMediaIds, setSelectedMediaIds] = useState<string[]>([])
+  const [isDeletingMedia, setIsDeletingMedia] = useState(false)
   const [isSmartRenameOpen, setIsSmartRenameOpen] = useState(false)
   const [smartRenamePatterns, setSmartRenamePatterns] = useState<SmartRenamePattern[]>([])
   const [openSmartRenamePreviewIds, setOpenSmartRenamePreviewIds] = useState<string[]>([])
@@ -430,6 +438,9 @@ export function MediaFilesViewer({
     )
   )
   const canMoveCustomOrder = orderBy === 'custom' ? onMove : undefined
+  const deleteMediaNames = deleteMediaIds
+    .map((mediaId) => mediaFiles.find((media) => media.id === mediaId)?.filename)
+    .filter((filename): filename is string => Boolean(filename))
 
   const changeOrderBy = (nextOrderBy: SourceMediaOrder): void => {
     if (!savedOrderBy) setUncontrolledOrderBy(nextOrderBy)
@@ -458,18 +469,19 @@ export function MediaFilesViewer({
     </div>
   )
 
-  const openRename = (media: MediaEditDraft): void => {
+  const openRename = (media: MediaEditDraft | MediaFile): void => {
     const renameFile = getSmartRenameFile(media)
     setRenameMedia(media)
     setRenameValue(renameFile.editableName)
     setRenameExtension(renameFile.extension)
   }
 
-  const submitRename = (): void => {
+  const submitRename = async (): Promise<void> => {
     if (!renameMedia || !renameValue.trim()) return
 
     const nextFilename = `${renameValue}${renameExtension}`
-    const nextFilenames = editMedia.map((media) =>
+    const baseMedia = isEditing ? editMedia : mediaFiles
+    const nextFilenames = baseMedia.map((media) =>
       media.id === renameMedia.id ? nextFilename : media.filename
     )
     const duplicateNames = getDuplicateFilenames(nextFilenames)
@@ -481,14 +493,77 @@ export function MediaFilesViewer({
       return
     }
 
-    onRenameDraft?.(renameMedia.id, nextFilename)
+    if (isEditing) {
+      onRenameDraft?.(renameMedia.id, nextFilename)
+      setRenameMedia(null)
+      setRenameExtension('')
+      return
+    }
+
+    if (!onRenameSave) return
+    try {
+      setIsSavingRename(true)
+      await onRenameSave(renameMedia.id, nextFilename)
+      toast.success('Video renamed', nextFilename)
+      setRenameMedia(null)
+      setRenameExtension('')
+    } catch (reason) {
+      toast.warning('Rename failed', reason instanceof Error ? reason.message : undefined)
+    } finally {
+      setIsSavingRename(false)
+    }
+  }
+
+  const closeRename = (): void => {
+    if (isSavingRename) return
     setRenameMedia(null)
     setRenameExtension('')
   }
 
-  const closeRename = (): void => {
-    setRenameMedia(null)
-    setRenameExtension('')
+  const toggleSelectedMedia = (media: MediaFile, isSelected: boolean): void => {
+    setSelectedMediaIds((currentIds) =>
+      isSelected
+        ? [...new Set([...currentIds, media.id])]
+        : currentIds.filter((mediaId) => mediaId !== media.id)
+    )
+  }
+
+  const selectAllMedia = (): void => {
+    setSelectedMediaIds((isEditing ? sortedEditMedia : sortedMediaFiles).map((media) => media.id))
+  }
+
+  const clearSelectedMedia = (): void => {
+    setSelectedMediaIds([])
+  }
+
+  const openDeleteMedia = (mediaIds: string[]): void => {
+    setDeleteMediaIds(mediaIds)
+  }
+
+  const closeDeleteMedia = (): void => {
+    if (isDeletingMedia) return
+    setDeleteMediaIds([])
+  }
+
+  const confirmDeleteMedia = async (): Promise<void> => {
+    if (!onDeleteMedia || deleteMediaIds.length === 0) return
+
+    try {
+      setIsDeletingMedia(true)
+      await onDeleteMedia(deleteMediaIds)
+      toast.success(
+        deleteMediaIds.length === 1 ? 'Video deleted' : 'Videos deleted',
+        `${deleteMediaIds.length} media ${deleteMediaIds.length === 1 ? 'row' : 'rows'} removed.`
+      )
+      setSelectedMediaIds((currentIds) =>
+        currentIds.filter((mediaId) => !deleteMediaIds.includes(mediaId))
+      )
+      setDeleteMediaIds([])
+    } catch (reason) {
+      toast.warning('Delete failed', reason instanceof Error ? reason.message : undefined)
+    } finally {
+      setIsDeletingMedia(false)
+    }
   }
 
   const openSmartRename = (): void => {
@@ -568,14 +643,56 @@ export function MediaFilesViewer({
   return (
     <section className="mt-10">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-bold">{title}</h2>
-        <button
-          className="rounded-lg border border-white/15 px-4 py-2 text-sm font-bold text-[#f4fff8] transition hover:bg-white/5"
-          type="button"
-          onClick={openSmartRename}
-        >
-          Smart Rename
-        </button>
+        <div>
+          <h2 className="text-lg font-bold">{title}</h2>
+          {isEditing && (
+            <p className="mt-1 text-xs text-[#a9c8bf]">
+              {selectedMediaIds.length} selected for bulk actions
+            </p>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {isEditing && (
+            <>
+              <button
+                className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold text-[#f4fff8] transition hover:bg-white/5 disabled:opacity-60"
+                type="button"
+                onClick={selectAllMedia}
+                disabled={
+                  (isEditing ? sortedEditMedia : sortedMediaFiles).length === 0 ||
+                  selectedMediaIds.length ===
+                    (isEditing ? sortedEditMedia : sortedMediaFiles).length
+                }
+              >
+                Select all
+              </button>
+              <button
+                className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold text-[#f4fff8] transition hover:bg-white/5 disabled:opacity-60"
+                type="button"
+                onClick={clearSelectedMedia}
+                disabled={selectedMediaIds.length === 0}
+              >
+                Clear
+              </button>
+              <button
+                className="inline-flex items-center gap-2 rounded-lg border border-[#ff6f60]/35 px-3 py-2 text-sm font-bold text-[#ffaaa0] transition hover:bg-[#3e1c1f]/70 disabled:opacity-60"
+                type="button"
+                onClick={() => openDeleteMedia(selectedMediaIds)}
+                disabled={selectedMediaIds.length === 0 || !onDeleteMedia}
+              >
+                <Trash2 size={16} />
+                Delete selected
+              </button>
+            </>
+          )}
+          <button
+            className="rounded-lg border border-white/15 px-4 py-2 text-sm font-bold text-[#f4fff8] transition hover:bg-white/5"
+            type="button"
+            onClick={openSmartRename}
+          >
+            Smart Rename
+          </button>
+        </div>
       </div>
       {isEditing ? (
         <CollectionDataViewer
@@ -584,6 +701,7 @@ export function MediaFilesViewer({
           isEditing
           onMove={canMoveCustomOrder}
           toolbarLeading={orderToolbar}
+          gridClassName="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
           emptyState={
             <div className="rounded-xl border border-dashed border-white/15 p-8 text-center text-[#a9c8bf]">
               {emptyLabel}
@@ -595,6 +713,10 @@ export function MediaFilesViewer({
               viewMode={viewMode}
               onPlay={onPlay}
               onRename={() => openRename(item)}
+              onDelete={() => openDeleteMedia([item.id])}
+              isSelectable
+              isSelected={selectedMediaIds.includes(item.id)}
+              onSelectChange={toggleSelectedMedia}
             />
           )}
         />
@@ -603,13 +725,20 @@ export function MediaFilesViewer({
           items={sortedMediaFiles}
           getId={(item) => item.id}
           toolbarLeading={orderToolbar}
+          gridClassName="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
           emptyState={
             <div className="rounded-xl border border-dashed border-white/15 p-8 text-center text-[#a9c8bf]">
               {emptyLabel}
             </div>
           }
           renderItem={(item, viewMode) => (
-            <VideoCard media={item} viewMode={viewMode} onPlay={onPlay} />
+            <VideoCard
+              media={item}
+              viewMode={viewMode}
+              onPlay={onPlay}
+              onRename={() => openRename(item)}
+              onDelete={() => openDeleteMedia([item.id])}
+            />
           )}
         />
       )}
@@ -811,10 +940,50 @@ export function MediaFilesViewer({
           <button
             className="rounded-lg bg-[#00b875] px-4 py-2.5 font-bold text-[#04120d] disabled:opacity-60"
             type="button"
-            onClick={submitRename}
-            disabled={!renameValue.trim()}
+            onClick={() => void submitRename()}
+            disabled={!renameValue.trim() || isSavingRename}
           >
-            Save
+            {isSavingRename ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={deleteMediaIds.length > 0}
+        title={deleteMediaIds.length === 1 ? 'Delete video?' : 'Delete selected videos?'}
+        size="sm"
+        onClose={closeDeleteMedia}
+      >
+        <div className="mt-5 rounded-lg border border-[#ff6f60]/25 bg-[#3e1c1f]/55 p-4 text-sm text-[#ffaaa0]">
+          This only removes the saved media row from NexMP. The original file in Explorer will not
+          be deleted.
+        </div>
+        <div className="mt-4 max-h-44 overflow-y-auto rounded-lg border border-white/10 bg-[#0d0f12]/70">
+          {deleteMediaNames.map((filename, index) => (
+            <p
+              key={`${filename}-${index}`}
+              className="truncate border-b border-white/[0.06] px-3 py-2 text-sm"
+            >
+              {filename}
+            </p>
+          ))}
+        </div>
+        <div className="mt-5 flex justify-end gap-3">
+          <button
+            className="rounded-lg px-4 py-2.5 font-semibold text-[#a9c8bf] hover:bg-white/5"
+            type="button"
+            onClick={closeDeleteMedia}
+            disabled={isDeletingMedia}
+          >
+            Cancel
+          </button>
+          <button
+            className="rounded-lg bg-[#ff6f60] px-4 py-2.5 font-bold text-[#220806] disabled:opacity-60"
+            type="button"
+            onClick={() => void confirmDeleteMedia()}
+            disabled={isDeletingMedia || !onDeleteMedia}
+          >
+            {isDeletingMedia ? 'Deleting...' : 'Delete'}
           </button>
         </div>
       </Modal>

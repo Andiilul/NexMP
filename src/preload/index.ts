@@ -34,9 +34,12 @@ const api: NexmpApi = {
       ipcRenderer.invoke('collections:add-media', input.sourceId, input.filePaths),
     updateMedia: (collectionId, media) =>
       ipcRenderer.invoke('collections:update-media', collectionId, media),
+    deleteMedia: (collectionId, mediaIds) =>
+      ipcRenderer.invoke('collections:delete-media', collectionId, mediaIds),
     listTags: (profileId) => ipcRenderer.invoke('collections:list-tags', profileId),
     createTag: (profileId, name, color) =>
       ipcRenderer.invoke('collections:create-tag', profileId, name, color),
+    deleteTag: (tagId) => ipcRenderer.invoke('collections:delete-tag', tagId),
     listMedia: (collectionId) => ipcRenderer.invoke('collections:list-media', collectionId),
     listSourceMedia: (sourceId) => ipcRenderer.invoke('collections:list-source-media', sourceId)
   }

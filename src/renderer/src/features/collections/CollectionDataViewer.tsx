@@ -12,6 +12,7 @@ type CollectionDataViewerProps<T> = {
   onViewModeChange?: (viewMode: LibraryViewMode) => void
   onMove?: (id: string, direction: -1 | 1) => void
   toolbarLeading?: React.ReactNode
+  gridClassName?: string
 }
 
 type DropPlacement = 'before' | 'after'
@@ -25,7 +26,8 @@ export function CollectionDataViewer<T>({
   viewMode: controlledViewMode,
   onViewModeChange,
   onMove,
-  toolbarLeading
+  toolbarLeading,
+  gridClassName = 'grid gap-4 sm:grid-cols-2 xl:grid-cols-3'
 }: CollectionDataViewerProps<T>): React.JSX.Element {
   const [localViewMode, setLocalViewMode] = useState<LibraryViewMode>('grid')
   const [draggedId, setDraggedId] = useState<string | null>(null)
@@ -116,11 +118,7 @@ export function CollectionDataViewer<T>({
       {items.length === 0 ? (
         emptyState
       ) : (
-        <div
-          className={
-            viewMode === 'grid' ? 'grid gap-4 sm:grid-cols-2 xl:grid-cols-3' : 'flex flex-col gap-3'
-          }
-        >
+        <div className={viewMode === 'grid' ? gridClassName : 'flex flex-col gap-3'}>
           {items.map((item, index) => {
             const id = getId(item)
             const isDragging = draggedId === id

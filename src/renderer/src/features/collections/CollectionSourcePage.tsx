@@ -226,6 +226,38 @@ export function CollectionSourcePage(): React.JSX.Element {
     )
   }
 
+  const saveMediaRename = async (mediaId: string, filename: string): Promise<void> => {
+    if (!collectionId) return
+
+    const baseMedia = [...mediaFiles].sort((firstMedia, secondMedia) => {
+      return firstMedia.sortOrder - secondMedia.sortOrder
+    })
+    const nextCollectionMedia = await window.api?.collections.updateMedia(
+      collectionId,
+      baseMedia.map((media) => ({
+        id: media.id,
+        filename: media.id === mediaId ? filename : media.filename,
+        sortOrder: media.sortOrder
+      }))
+    )
+    const nextSourceMedia = (nextCollectionMedia ?? []).filter(
+      (media) => media.collectionSourceId === sourceId
+    )
+    setMediaFiles(nextSourceMedia)
+    applyEditState(source, nextSourceMedia)
+  }
+
+  const deleteMedia = async (mediaIds: string[]): Promise<void> => {
+    if (!collectionId) return
+
+    const nextCollectionMedia = await window.api?.collections.deleteMedia(collectionId, mediaIds)
+    const nextSourceMedia = (nextCollectionMedia ?? []).filter(
+      (media) => media.collectionSourceId === sourceId
+    )
+    setMediaFiles(nextSourceMedia)
+    applyEditState(source, nextSourceMedia)
+  }
+
   const updateSourceMediaOrder = async (mediaOrder: SourceMediaOrder): Promise<void> => {
     if (!sourceId) return
 
@@ -255,12 +287,14 @@ export function CollectionSourcePage(): React.JSX.Element {
     const renameById = new Map(renames.map((rename) => [rename.id, rename.filename]))
     const baseMedia = isEditing
       ? editMedia
-      : mediaFiles.map((media, index) => ({
-          id: media.id,
-          filename: media.filename,
-          sortOrder: index,
-          media
-        }))
+      : [...mediaFiles]
+          .sort((firstMedia, secondMedia) => firstMedia.sortOrder - secondMedia.sortOrder)
+          .map((media) => ({
+            id: media.id,
+            filename: media.filename,
+            sortOrder: media.sortOrder,
+            media
+          }))
 
     try {
       setIsSaving(true)
@@ -270,7 +304,7 @@ export function CollectionSourcePage(): React.JSX.Element {
         baseMedia.map((media, index) => ({
           id: media.id,
           filename: renameById.get(media.id) ?? media.filename,
-          sortOrder: index
+          sortOrder: isEditing ? index : media.sortOrder
         }))
       )
       const nextSourceMedia = (nextCollectionMedia ?? []).filter(
@@ -285,7 +319,7 @@ export function CollectionSourcePage(): React.JSX.Element {
           return {
             id: media.id,
             filename,
-            sortOrder: index,
+            sortOrder: isEditing ? index : media.sortOrder,
             media: { ...nextMedia, filename }
           }
         })
@@ -415,6 +449,8 @@ export function CollectionSourcePage(): React.JSX.Element {
             onMove={moveMedia}
             onPlay={playMedia}
             onRenameDraft={renameMediaDraft}
+            onRenameSave={saveMediaRename}
+            onDeleteMedia={deleteMedia}
             onSmartRenameSave={saveSmartRename}
           />
         </>

@@ -15,6 +15,8 @@ import {
   createTag,
   deleteCollection,
   deleteCollectionSource,
+  deleteTag,
+  deleteMediaFiles,
   listCollections,
   listTags,
   listCollectionMedia,
@@ -97,6 +99,9 @@ export function registerCollectionIpc(): void {
     (_event, collectionId: string, media: UpdateMediaFileInput[]) =>
       updateMediaFiles(collectionId, media)
   )
+  ipcMain.handle('collections:delete-media', (_event, collectionId: string, mediaIds: string[]) =>
+    deleteMediaFiles(collectionId, mediaIds)
+  )
   ipcMain.handle(
     'collections:search',
     (_event, profileId: string, query: string, tagIds: string[]) =>
@@ -113,4 +118,5 @@ export function registerCollectionIpc(): void {
     'collections:create-tag',
     (_event, profileId: string, name: string, color: string) => createTag(profileId, name, color)
   )
+  ipcMain.handle('collections:delete-tag', (_event, tagId: string) => deleteTag(tagId))
 }

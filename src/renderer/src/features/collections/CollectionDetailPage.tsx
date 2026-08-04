@@ -1,4 +1,14 @@
-import { ArrowLeft, Check, FilePlus, FolderOpen, Play, Settings, Trash2, X } from 'lucide-react'
+import {
+  ArrowLeft,
+  Check,
+  ChevronDown,
+  FilePlus,
+  FolderOpen,
+  Play,
+  Settings,
+  Trash2,
+  X
+} from 'lucide-react'
 import { useCallback, useEffect, useState, type DragEvent } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import type {
@@ -25,9 +35,17 @@ type SourceEditDraft = {
 }
 
 type AddSourceDraft = {
+  name: string
   sourcePath: string
   preview: SourceMediaPreview[]
   selectedFilePaths: string[]
+  isDynamic: boolean
+  isPreviewOpen: boolean
+}
+
+function getFolderName(sourcePath: string): string {
+  const parts = sourcePath.split(/[\\/]/).filter(Boolean)
+  return parts.at(-1) ?? sourcePath
 }
 
 export function CollectionDetailPage(): React.JSX.Element {
@@ -44,8 +62,7 @@ export function CollectionDetailPage(): React.JSX.Element {
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isAddSourceOpen, setIsAddSourceOpen] = useState(false)
-  const [addSourceDynamic, setAddSourceDynamic] = useState(true)
-  const [addSourceDraft, setAddSourceDraft] = useState<AddSourceDraft | null>(null)
+  const [addSourceDrafts, setAddSourceDrafts] = useState<AddSourceDraft[]>([])
   const [isConfirmPendingOpen, setIsConfirmPendingOpen] = useState(false)
   const returnTo = `${location.pathname}${location.search}`
 
@@ -231,6 +248,34 @@ export function CollectionDetailPage(): React.JSX.Element {
     )
   }
 
+  const saveMediaRename = async (mediaId: string, filename: string): Promise<void> => {
+    if (!collectionId) return
+
+    const baseMedia = [...singleSourceMedia].sort((firstMedia, secondMedia) => {
+      return firstMedia.sortOrder - secondMedia.sortOrder
+    })
+    const nextMediaFiles = await window.api?.collections.updateMedia(
+      collectionId,
+      baseMedia.map((media) => ({
+        id: media.id,
+        filename: media.id === mediaId ? filename : media.filename,
+        sortOrder: media.sortOrder
+      }))
+    )
+    const nextFiles = nextMediaFiles ?? []
+    setMediaFiles(nextFiles)
+    applyEditState(collection, nextFiles)
+  }
+
+  const deleteMedia = async (mediaIds: string[]): Promise<void> => {
+    if (!collectionId) return
+
+    const nextMediaFiles = await window.api?.collections.deleteMedia(collectionId, mediaIds)
+    const nextFiles = nextMediaFiles ?? []
+    setMediaFiles(nextFiles)
+    applyEditState(collection, nextFiles)
+  }
+
   const updateSingleSourceMediaOrder = async (mediaOrder: SourceMediaOrder): Promise<void> => {
     if (!singleSource || !collectionId) return
 
@@ -256,12 +301,14 @@ export function CollectionDetailPage(): React.JSX.Element {
     const renameById = new Map(renames.map((rename) => [rename.id, rename.filename]))
     const baseMedia = isEditing
       ? editMedia
-      : singleSourceMedia.map((media, index) => ({
-          id: media.id,
-          filename: media.filename,
-          sortOrder: index,
-          media
-        }))
+      : [...singleSourceMedia]
+          .sort((firstMedia, secondMedia) => firstMedia.sortOrder - secondMedia.sortOrder)
+          .map((media) => ({
+            id: media.id,
+            filename: media.filename,
+            sortOrder: media.sortOrder,
+            media
+          }))
 
     try {
       setIsSaving(true)
@@ -271,7 +318,7 @@ export function CollectionDetailPage(): React.JSX.Element {
         baseMedia.map((media, index) => ({
           id: media.id,
           filename: renameById.get(media.id) ?? media.filename,
-          sortOrder: index
+          sortOrder: isEditing ? index : media.sortOrder
         }))
       )
       const nextFiles = nextMediaFiles ?? []
@@ -284,7 +331,7 @@ export function CollectionDetailPage(): React.JSX.Element {
           return {
             id: media.id,
             filename,
-            sortOrder: index,
+            sortOrder: isEditing ? index : media.sortOrder,
             media: { ...nextMedia, filename }
           }
         })
@@ -362,22 +409,33 @@ export function CollectionDetailPage(): React.JSX.Element {
     setIsEditing(false)
   }
 
-  const previewAddSource = async (sourcePath: string): Promise<void> => {
+  const previewAddSource = async (sourcePath: string): Promise<AddSourceDraft> => {
     const preview = await window.api?.collections.previewSourceMedia(sourcePath)
-    setAddSourceDraft({
+
+    return {
+      name: getFolderName(sourcePath),
       sourcePath,
       preview: preview ?? [],
-      selectedFilePaths: (preview ?? []).map((media) => media.filePath)
-    })
+      selectedFilePaths: (preview ?? []).map((media) => media.filePath),
+      isDynamic: true,
+      isPreviewOpen: false
+    }
   }
 
   const chooseAddSourceFolder = async (): Promise<void> => {
     try {
       setError(null)
       const selectedPaths = await window.api?.collections.selectSourceFolders()
-      const sourcePath = selectedPaths?.[0]
-      if (!sourcePath) return
-      await previewAddSource(sourcePath)
+      if (!selectedPaths || selectedPaths.length === 0) return
+      const existingPaths = new Set([
+        ...(collection?.sources.map((source) => source.sourcePath) ?? []),
+        ...addSourceDrafts.map((source) => source.sourcePath)
+      ])
+      const nextPaths = selectedPaths.filter((sourcePath) => !existingPaths.has(sourcePath))
+      const nextDrafts = await Promise.all(
+        nextPaths.map((sourcePath) => previewAddSource(sourcePath))
+      )
+      setAddSourceDrafts((current) => [...current, ...nextDrafts])
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to select source folder.')
     }
@@ -391,23 +449,38 @@ export function CollectionDetailPage(): React.JSX.Element {
       return
     }
 
-    await previewAddSource(fileWithPath.path)
+    if (
+      addSourceDrafts.some((source) => source.sourcePath === fileWithPath.path) ||
+      collection?.sources.some((source) => source.sourcePath === fileWithPath.path)
+    ) {
+      return
+    }
+
+    const draft = await previewAddSource(fileWithPath.path)
+    setAddSourceDrafts((current) =>
+      current.some((source) => source.sourcePath === draft.sourcePath)
+        ? current
+        : [...current, draft]
+    )
   }
 
   const addSource = async (): Promise<void> => {
-    if (!collectionId || !addSourceDraft) return
+    if (!collectionId || addSourceDrafts.length === 0) return
 
     try {
       setIsSaving(true)
       setError(null)
-      await window.api?.collections.addSource({
-        collectionId,
-        sourcePath: addSourceDraft.sourcePath,
-        isDynamic: addSourceDynamic,
-        includedFilePaths: addSourceDynamic ? undefined : addSourceDraft.selectedFilePaths
-      })
+      for (const sourceDraft of addSourceDrafts) {
+        await window.api?.collections.addSource({
+          collectionId,
+          name: sourceDraft.name,
+          sourcePath: sourceDraft.sourcePath,
+          isDynamic: sourceDraft.isDynamic,
+          includedFilePaths: sourceDraft.isDynamic ? undefined : sourceDraft.selectedFilePaths
+        })
+      }
       setIsAddSourceOpen(false)
-      setAddSourceDraft(null)
+      setAddSourceDrafts([])
       await reload()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to add source.')
@@ -567,6 +640,8 @@ export function CollectionDetailPage(): React.JSX.Element {
               onMove={moveMedia}
               onPlay={playMedia}
               onRenameDraft={renameMediaDraft}
+              onRenameSave={saveMediaRename}
+              onDeleteMedia={deleteMedia}
               onSmartRenameSave={saveSmartRename}
               emptyLabel={isEditing ? 'No videos.' : 'No videos found yet.'}
             />
@@ -673,67 +748,160 @@ export function CollectionDetailPage(): React.JSX.Element {
               <span className="flex items-center gap-3">
                 <FolderOpen className="text-[#00d982]" size={22} />
                 <span className="min-w-0">
-                  <span className="block font-semibold">
-                    {addSourceDraft ? addSourceDraft.sourcePath : 'Click or drag a folder here'}
-                  </span>
+                  <span className="block font-semibold">Click or drag folders here</span>
                   <span className="mt-1 block text-sm text-[#a9c8bf]">
-                    {addSourceDraft
-                      ? `${addSourceDraft.preview.length} videos found`
-                      : 'The folder picker is used when drag path is unavailable.'}
+                    {addSourceDrafts.length > 0
+                      ? `${addSourceDrafts.length} folder${addSourceDrafts.length === 1 ? '' : 's'} ready`
+                      : 'Each selected folder becomes its own source.'}
                   </span>
                 </span>
               </span>
             </button>
-            <label className="mt-4 flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3">
-              <span>
-                <span className="block text-sm font-semibold text-[#f4fff8]">Dynamic source</span>
-                <span className="mt-0.5 block text-xs text-[#a9c8bf]">
-                  Future rescans create New cards before adding them to playback.
-                </span>
-              </span>
-              <input
-                className="h-5 w-5 accent-[#00b875]"
-                type="checkbox"
-                checked={addSourceDynamic}
-                onChange={(event) => setAddSourceDynamic(event.target.checked)}
-              />
-            </label>
-            {addSourceDraft && !addSourceDynamic && (
-              <div className="mt-4 min-h-0 overflow-y-auto rounded-lg border border-white/10">
-                {addSourceDraft.preview.map((media) => (
-                  <label
-                    key={media.filePath}
-                    className="flex items-center gap-3 border-b border-white/[0.06] px-3 py-2.5 last:border-b-0"
-                  >
-                    <input
-                      className="h-4 w-4 accent-[#00b875]"
-                      type="checkbox"
-                      checked={addSourceDraft.selectedFilePaths.includes(media.filePath)}
-                      onChange={(event) => {
-                        setAddSourceDraft((current) => {
-                          if (!current) return current
-                          const selectedFilePaths = event.target.checked
-                            ? [...new Set([...current.selectedFilePaths, media.filePath])]
-                            : current.selectedFilePaths.filter((path) => path !== media.filePath)
-                          return { ...current, selectedFilePaths }
-                        })
-                      }}
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold">{media.filename}</span>
-                      <span className="block truncate text-xs text-[#a9c8bf]">
-                        {media.filePath}
-                      </span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            )}
+
+            <div className="mt-4 min-h-0 space-y-3 overflow-y-auto pr-1">
+              {addSourceDrafts.map((sourceDraft) => (
+                <section
+                  key={sourceDraft.sourcePath}
+                  className="rounded-xl border border-white/10 bg-[#0d0f12]/70"
+                >
+                  <div className="flex items-center gap-3 p-3">
+                    <button
+                      className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-[#a9c8bf] hover:bg-white/5"
+                      type="button"
+                      onClick={() =>
+                        setAddSourceDrafts((current) =>
+                          current.map((item) =>
+                            item.sourcePath === sourceDraft.sourcePath
+                              ? { ...item, isPreviewOpen: !item.isPreviewOpen }
+                              : item
+                          )
+                        )
+                      }
+                      aria-label={`Toggle preview for ${sourceDraft.sourcePath}`}
+                    >
+                      <ChevronDown
+                        className={`transition-transform ${
+                          sourceDraft.isPreviewOpen ? 'rotate-0' : '-rotate-90'
+                        }`}
+                        size={18}
+                      />
+                    </button>
+                    <FolderOpen className="shrink-0 text-[#00d982]" size={19} />
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <input
+                        className="w-full rounded-lg border border-white/15 bg-[#171a1f] px-3 py-2 text-sm font-bold text-[#f4fff8] outline-none placeholder:text-white/35 focus:border-[#00b875]"
+                        value={sourceDraft.name}
+                        placeholder="Source name"
+                        maxLength={80}
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={(event) =>
+                          setAddSourceDrafts((current) =>
+                            current.map((item) =>
+                              item.sourcePath === sourceDraft.sourcePath
+                                ? { ...item, name: event.target.value }
+                                : item
+                            )
+                          )
+                        }
+                      />
+                      <p className="truncate text-xs text-[#a9c8bf]">{sourceDraft.sourcePath}</p>
+                      <p className="mt-0.5 text-xs text-[#a9c8bf]">
+                        {sourceDraft.preview.length} videos found -{' '}
+                        {sourceDraft.isDynamic
+                          ? 'dynamic'
+                          : `${sourceDraft.selectedFilePaths.length} selected`}
+                      </p>
+                    </div>
+                    <label
+                      className="flex shrink-0 items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-[#a9c8bf]"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      Dynamic
+                      <input
+                        className="h-4 w-4 accent-[#00b875]"
+                        type="checkbox"
+                        checked={sourceDraft.isDynamic}
+                        onChange={(event) =>
+                          setAddSourceDrafts((current) =>
+                            current.map((item) =>
+                              item.sourcePath === sourceDraft.sourcePath
+                                ? { ...item, isDynamic: event.target.checked }
+                                : item
+                            )
+                          )
+                        }
+                      />
+                    </label>
+                    <button
+                      className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-[#ffaaa0] hover:bg-[#3e1c1f]/70"
+                      type="button"
+                      onClick={() =>
+                        setAddSourceDrafts((current) =>
+                          current.filter((item) => item.sourcePath !== sourceDraft.sourcePath)
+                        )
+                      }
+                      aria-label={`Remove ${sourceDraft.sourcePath}`}
+                    >
+                      <Trash2 size={17} />
+                    </button>
+                  </div>
+                  {sourceDraft.isPreviewOpen && (
+                    <div className="max-h-56 overflow-y-auto border-t border-white/10">
+                      {sourceDraft.preview.map((media) => (
+                        <label
+                          key={media.filePath}
+                          className="flex items-center gap-3 border-b border-white/[0.06] px-3 py-2.5 last:border-b-0"
+                        >
+                          <input
+                            className="h-4 w-4 accent-[#00b875] disabled:opacity-35"
+                            type="checkbox"
+                            disabled={sourceDraft.isDynamic}
+                            checked={
+                              sourceDraft.isDynamic ||
+                              sourceDraft.selectedFilePaths.includes(media.filePath)
+                            }
+                            onChange={(event) => {
+                              setAddSourceDrafts((current) =>
+                                current.map((item) => {
+                                  if (item.sourcePath !== sourceDraft.sourcePath) return item
+                                  const selectedFilePaths = event.target.checked
+                                    ? [...new Set([...item.selectedFilePaths, media.filePath])]
+                                    : item.selectedFilePaths.filter(
+                                        (path) => path !== media.filePath
+                                      )
+                                  return { ...item, selectedFilePaths }
+                                })
+                              )
+                            }}
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold">
+                              {media.filename}
+                            </span>
+                            <span className="block truncate text-xs text-[#a9c8bf]">
+                              {media.filePath}
+                            </span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              ))}
+              {addSourceDrafts.length === 0 && (
+                <div className="rounded-lg border border-dashed border-white/15 p-5 text-center text-sm text-[#a9c8bf]">
+                  No folders selected yet.
+                </div>
+              )}
+            </div>
             <div className="mt-5 flex justify-end gap-3">
               <button
                 className="rounded-lg px-4 py-2.5 font-semibold text-[#a9c8bf] hover:bg-white/5"
                 type="button"
-                onClick={() => setIsAddSourceOpen(false)}
+                onClick={() => {
+                  setIsAddSourceOpen(false)
+                  setAddSourceDrafts([])
+                }}
               >
                 Cancel
               </button>
@@ -741,9 +909,13 @@ export function CollectionDetailPage(): React.JSX.Element {
                 className="rounded-lg bg-[#00b875] px-4 py-2.5 font-bold text-[#04120d] disabled:opacity-60"
                 type="button"
                 onClick={() => void addSource()}
-                disabled={!addSourceDraft || isSaving}
+                disabled={
+                  addSourceDrafts.length === 0 ||
+                  addSourceDrafts.some((source) => !source.name.trim()) ||
+                  isSaving
+                }
               >
-                Add Source
+                Add {addSourceDrafts.length > 1 ? `${addSourceDrafts.length} Sources` : 'Source'}
               </button>
             </div>
           </div>
