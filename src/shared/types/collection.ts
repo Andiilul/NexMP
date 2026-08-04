@@ -10,12 +10,15 @@ export type Collection = {
   updatedAt: string
 }
 
+export type SourceMediaOrder = 'custom' | 'name' | 'date'
+
 export type CollectionSource = {
   id: string
   collectionId: string
   name: string
   sourcePath: string
   sortOrder: number
+  mediaOrder: SourceMediaOrder
   isMissing: boolean
   isDynamic: boolean
   lastScannedAt: string | null
@@ -31,10 +34,12 @@ export type MediaFile = {
   sourceName: string
   sourcePath: string
   sourceIsDynamic: boolean
+  sourceMediaOrder: SourceMediaOrder
   filePath: string
   filename: string
   extension: string
   sizeBytes: number
+  modifiedAt: string | null
   isMissing: boolean
   isPending: boolean
   url: string
@@ -88,6 +93,11 @@ export type UpdateCollectionSourceInput = {
   sortOrder: number
 }
 
+export type UpdateSourceMediaOrderInput = {
+  sourceId: string
+  mediaOrder: SourceMediaOrder
+}
+
 export type UpdateMediaFileInput = {
   id: string
   filename: string
@@ -118,6 +128,7 @@ export type CollectionApi = {
     collectionId: string,
     sources: UpdateCollectionSourceInput[]
   ) => Promise<CollectionWithSources>
+  updateSourceMediaOrder: (input: UpdateSourceMediaOrderInput) => Promise<CollectionWithSources>
   rescan: (collectionId: string) => Promise<MediaFile[]>
   rescanSource: (sourceId: string) => Promise<MediaFile[]>
   confirmPendingMedia: (collectionId: string) => Promise<MediaFile[]>

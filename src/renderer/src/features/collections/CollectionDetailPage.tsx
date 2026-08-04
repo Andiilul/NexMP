@@ -5,12 +5,17 @@ import type {
   CollectionSource,
   CollectionWithSources,
   MediaFile,
+  SourceMediaOrder,
   SourceMediaPreview
 } from '../../../../shared/types/collection'
 import { CollectionDataViewer } from './CollectionDataViewer'
 import { createPlayablePlaylist, type PlayerRouteState } from './mediaPlayback'
+import {
+  MediaFilesViewer,
+  type MediaEditDraft,
+  type SmartRenameSaveInput
+} from './MediaFilesViewer'
 import { SourceCard } from './SourceCard'
-import { VideoCard } from './VideoCard'
 
 type SourceEditDraft = {
   id: string
@@ -34,6 +39,7 @@ export function CollectionDetailPage(): React.JSX.Element {
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([])
   const [editName, setEditName] = useState('')
   const [editSources, setEditSources] = useState<SourceEditDraft[]>([])
+  const [editMedia, setEditMedia] = useState<MediaEditDraft[]>([])
   const [isEditing, setIsEditing] = useState(searchParams.get('edit') === '1')
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -43,7 +49,10 @@ export function CollectionDetailPage(): React.JSX.Element {
   const [isConfirmPendingOpen, setIsConfirmPendingOpen] = useState(false)
   const returnTo = `${location.pathname}${location.search}`
 
-  const applyEditState = (nextCollection: CollectionWithSources | null): void => {
+  const applyEditState = (
+    nextCollection: CollectionWithSources | null,
+    nextMediaFiles: MediaFile[]
+  ): void => {
     if (!nextCollection) return
     setEditName(nextCollection.name)
     setEditSources(
@@ -53,6 +62,16 @@ export function CollectionDetailPage(): React.JSX.Element {
         sortOrder: index,
         source
       }))
+    )
+    setEditMedia(
+      nextMediaFiles
+        .filter((media) => !media.isPending)
+        .map((media, index) => ({
+          id: media.id,
+          filename: media.filename,
+          sortOrder: index,
+          media
+        }))
     )
   }
 
@@ -84,7 +103,7 @@ export function CollectionDetailPage(): React.JSX.Element {
     const { nextCollection, nextMediaFiles } = await fetchCollection()
     setCollection(nextCollection)
     setMediaFiles(nextMediaFiles)
-    applyEditState(nextCollection)
+    applyEditState(nextCollection, nextMediaFiles)
   }, [fetchCollection])
 
   useEffect(() => {
@@ -96,7 +115,7 @@ export function CollectionDetailPage(): React.JSX.Element {
         if (!isMounted) return
         setCollection(nextCollection)
         setMediaFiles(nextMediaFiles)
-        applyEditState(nextCollection)
+        applyEditState(nextCollection, nextMediaFiles)
       } catch (reason) {
         if (!isMounted) return
         setError(reason instanceof Error ? reason.message : 'Unable to load this collection.')
@@ -190,6 +209,94 @@ export function CollectionDetailPage(): React.JSX.Element {
     )
   }
 
+  const moveMedia = (mediaId: string, direction: -1 | 1): void => {
+    setEditMedia((current) => {
+      const index = current.findIndex((media) => media.id === mediaId)
+      const targetIndex = index + direction
+      if (index < 0 || targetIndex < 0 || targetIndex >= current.length) return current
+
+      const next = [...current]
+      const [media] = next.splice(index, 1)
+      if (!media) return current
+      next.splice(targetIndex, 0, media)
+      return next.map((item, sortOrder) => ({ ...item, sortOrder }))
+    })
+  }
+
+  const renameMediaDraft = (mediaId: string, filename: string): void => {
+    setEditMedia((current) =>
+      current.map((media) =>
+        media.id === mediaId ? { ...media, filename, media: { ...media.media, filename } } : media
+      )
+    )
+  }
+
+  const updateSingleSourceMediaOrder = async (mediaOrder: SourceMediaOrder): Promise<void> => {
+    if (!singleSource || !collectionId) return
+
+    try {
+      setError(null)
+      const nextCollection = await window.api?.collections.updateSourceMediaOrder({
+        sourceId: singleSource.id,
+        mediaOrder
+      })
+      const nextMediaFiles = await window.api?.collections.listMedia(collectionId)
+
+      setCollection(nextCollection ?? collection)
+      setMediaFiles(nextMediaFiles ?? [])
+      applyEditState(nextCollection ?? collection, nextMediaFiles ?? [])
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to update media order.')
+    }
+  }
+
+  const saveSmartRename = async (renames: SmartRenameSaveInput[]): Promise<void> => {
+    if (!collectionId) return
+
+    const renameById = new Map(renames.map((rename) => [rename.id, rename.filename]))
+    const baseMedia = isEditing
+      ? editMedia
+      : singleSourceMedia.map((media, index) => ({
+          id: media.id,
+          filename: media.filename,
+          sortOrder: index,
+          media
+        }))
+
+    try {
+      setIsSaving(true)
+      setError(null)
+      const nextMediaFiles = await window.api?.collections.updateMedia(
+        collectionId,
+        baseMedia.map((media, index) => ({
+          id: media.id,
+          filename: renameById.get(media.id) ?? media.filename,
+          sortOrder: index
+        }))
+      )
+      const nextFiles = nextMediaFiles ?? []
+      const nextMediaById = new Map(nextFiles.map((media) => [media.id, media]))
+      setMediaFiles(nextFiles)
+      setEditMedia(
+        baseMedia.map((media, index) => {
+          const filename = renameById.get(media.id) ?? media.filename
+          const nextMedia = nextMediaById.get(media.id) ?? media.media
+          return {
+            id: media.id,
+            filename,
+            sortOrder: index,
+            media: { ...nextMedia, filename }
+          }
+        })
+      )
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to save smart rename changes.')
+      throw reason
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   const saveSettings = async (): Promise<void> => {
     if (!collectionId) return
 
@@ -197,21 +304,32 @@ export function CollectionDetailPage(): React.JSX.Element {
       setIsSaving(true)
       setError(null)
       await window.api?.collections.update({ id: collectionId, name: editName })
-      const removedSourceIds =
-        collection?.sources
-          .filter((source) => !editSources.some((draft) => draft.id === source.id))
-          .map((source) => source.id) ?? []
-      for (const sourceId of removedSourceIds) {
-        await window.api?.collections.deleteSource(sourceId)
+      if (isSingleFolder) {
+        await window.api?.collections.updateMedia(
+          collectionId,
+          editMedia.map((media, index) => ({
+            id: media.id,
+            filename: media.filename,
+            sortOrder: index
+          }))
+        )
+      } else {
+        const removedSourceIds =
+          collection?.sources
+            .filter((source) => !editSources.some((draft) => draft.id === source.id))
+            .map((source) => source.id) ?? []
+        for (const sourceId of removedSourceIds) {
+          await window.api?.collections.deleteSource(sourceId)
+        }
+        await window.api?.collections.updateSources(
+          collectionId,
+          editSources.map((source, index) => ({
+            id: source.id,
+            name: source.name,
+            sortOrder: index
+          }))
+        )
       }
-      await window.api?.collections.updateSources(
-        collectionId,
-        editSources.map((source, index) => ({
-          id: source.id,
-          name: source.name,
-          sortOrder: index
-        }))
-      )
       await reload()
       setIsEditing(false)
     } catch (reason) {
@@ -221,8 +339,26 @@ export function CollectionDetailPage(): React.JSX.Element {
     }
   }
 
+  const addMediaToSingleSource = async (): Promise<void> => {
+    if (!singleSource) return
+
+    try {
+      setError(null)
+      const filePaths = await window.api?.collections.selectMediaFiles()
+      if (!filePaths || filePaths.length === 0) return
+      const nextMediaFiles = await window.api?.collections.addMedia({
+        sourceId: singleSource.id,
+        filePaths
+      })
+      setMediaFiles(nextMediaFiles ?? [])
+      applyEditState(collection, nextMediaFiles ?? [])
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to add media.')
+    }
+  }
+
   const cancelSettings = async (): Promise<void> => {
-    await reload()
+    applyEditState(collection, mediaFiles)
     setIsEditing(false)
   }
 
@@ -277,23 +413,6 @@ export function CollectionDetailPage(): React.JSX.Element {
       setError(reason instanceof Error ? reason.message : 'Unable to add source.')
     } finally {
       setIsSaving(false)
-    }
-  }
-
-  const addMediaToSingleSource = async (): Promise<void> => {
-    if (!singleSource) return
-
-    try {
-      setError(null)
-      const filePaths = await window.api?.collections.selectMediaFiles()
-      if (!filePaths || filePaths.length === 0) return
-      const nextMediaFiles = await window.api?.collections.addMedia({
-        sourceId: singleSource.id,
-        filePaths
-      })
-      setMediaFiles(nextMediaFiles ?? [])
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to add media.')
     }
   }
 
@@ -437,7 +556,23 @@ export function CollectionDetailPage(): React.JSX.Element {
             </section>
           )}
 
-          {isEditing && (
+          {isSingleFolder && (
+            <MediaFilesViewer
+              title={isEditing ? 'Video settings' : 'Videos'}
+              mediaFiles={singleSourceMedia}
+              editMedia={editMedia}
+              isEditing={isEditing}
+              orderBy={singleSource?.mediaOrder ?? 'name'}
+              onOrderChange={updateSingleSourceMediaOrder}
+              onMove={moveMedia}
+              onPlay={playMedia}
+              onRenameDraft={renameMediaDraft}
+              onSmartRenameSave={saveSmartRename}
+              emptyLabel={isEditing ? 'No videos.' : 'No videos found yet.'}
+            />
+          )}
+
+          {isEditing && !isSingleFolder && (
             <section className="mt-10">
               <h2 className="mb-4 text-lg font-bold">Collection settings</h2>
               <CollectionDataViewer
@@ -505,33 +640,6 @@ export function CollectionDetailPage(): React.JSX.Element {
                     onRename={(selectedSource) =>
                       navigate(
                         `/home/collections/${collection.id}/sources/${selectedSource.id}?edit=1`
-                      )
-                    }
-                  />
-                )}
-              />
-            </section>
-          )}
-
-          {!isEditing && isSingleFolder && (
-            <section className="mt-10">
-              <h2 className="mb-4 text-lg font-bold">Videos</h2>
-              <CollectionDataViewer
-                items={singleSourceMedia}
-                getId={(media) => media.id}
-                emptyState={
-                  <div className="rounded-xl border border-dashed border-white/15 p-8 text-center text-[#a9c8bf]">
-                    No videos found yet.
-                  </div>
-                }
-                renderItem={(media, viewMode) => (
-                  <VideoCard
-                    media={media}
-                    viewMode={viewMode}
-                    onPlay={playMedia}
-                    onRename={(selectedMedia) =>
-                      navigate(
-                        `/home/collections/${collection.id}/sources/${selectedMedia.collectionSourceId}?edit=1`
                       )
                     }
                   />

@@ -4,6 +4,7 @@ import type {
   CreateCollectionInput,
   UpdateCollectionInput,
   UpdateCollectionSourceInput,
+  UpdateSourceMediaOrderInput,
   UpdateMediaFileInput
 } from '../../shared/types/collection'
 import {
@@ -23,6 +24,7 @@ import {
   rescanCollectionSource,
   searchCollections,
   updateCollection,
+  updateCollectionSourceMediaOrder,
   updateCollectionSources,
   updateMediaFiles
 } from '../services/collectionService'
@@ -73,6 +75,10 @@ export function registerCollectionIpc(): void {
     'collections:update-sources',
     (_event, collectionId: string, sources: UpdateCollectionSourceInput[]) =>
       updateCollectionSources(collectionId, sources)
+  )
+  ipcMain.handle(
+    'collections:update-source-media-order',
+    (_event, input: UpdateSourceMediaOrderInput) => updateCollectionSourceMediaOrder(input)
   )
   ipcMain.handle('collections:rescan', (_event, collectionId: string) =>
     rescanCollection(collectionId)

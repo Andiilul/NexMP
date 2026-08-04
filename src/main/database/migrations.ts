@@ -92,6 +92,12 @@ const migrations: Migration[] = [
       ALTER TABLE collections ADD COLUMN rating INTEGER NOT NULL DEFAULT 0;
       ALTER TABLE collections ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0;
     `
+  },
+  {
+    version: 5,
+    sql: `
+      ALTER TABLE collection_sources ADD COLUMN media_order TEXT NOT NULL DEFAULT 'name';
+    `
   }
 ]
 

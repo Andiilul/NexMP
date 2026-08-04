@@ -24,6 +24,8 @@ const api: NexmpApi = {
     deleteSource: (sourceId) => ipcRenderer.invoke('collections:delete-source', sourceId),
     updateSources: (collectionId, sources) =>
       ipcRenderer.invoke('collections:update-sources', collectionId, sources),
+    updateSourceMediaOrder: (input) =>
+      ipcRenderer.invoke('collections:update-source-media-order', input),
     rescan: (collectionId) => ipcRenderer.invoke('collections:rescan', collectionId),
     rescanSource: (sourceId) => ipcRenderer.invoke('collections:rescan-source', sourceId),
     confirmPendingMedia: (collectionId) =>

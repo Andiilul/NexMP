@@ -1,4 +1,5 @@
 import { AlertTriangle, FileVideo, Pencil, Play } from 'lucide-react'
+import { useRef, useState } from 'react'
 import type { MediaFile } from '../../../../shared/types/collection'
 import type { LibraryViewMode } from './types'
 
@@ -9,6 +10,10 @@ type VideoCardProps = {
   onRename?: (media: MediaFile) => void
 }
 
+const videoCardThumbnailCache = new Map<string, string>()
+
+const getVideoCardThumbnailKey = (media: MediaFile): string => `${media.filePath}:${media.url}`
+
 export function VideoCard({
   media,
   viewMode,
@@ -17,6 +22,31 @@ export function VideoCard({
 }: VideoCardProps): React.JSX.Element {
   const isGrid = viewMode === 'grid'
   const statusLabel = media.isMissing ? 'LOST' : media.isPending ? 'NEW' : null
+  const thumbnailKey = getVideoCardThumbnailKey(media)
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(
+    () => videoCardThumbnailCache.get(thumbnailKey) ?? null
+  )
+  const thumbnailCanvasRef = useRef<HTMLCanvasElement | null>(null)
+
+  const captureThumbnail = (video: HTMLVideoElement): void => {
+    if (thumbnailUrl || media.isMissing || !video.videoWidth || !video.videoHeight) return
+
+    try {
+      const canvas = thumbnailCanvasRef.current ?? document.createElement('canvas')
+      thumbnailCanvasRef.current = canvas
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
+      const context = canvas.getContext('2d')
+      if (!context) return
+
+      context.drawImage(video, 0, 0, canvas.width, canvas.height)
+      const imageUrl = canvas.toDataURL('image/jpeg', 0.72)
+      videoCardThumbnailCache.set(thumbnailKey, imageUrl)
+      setThumbnailUrl(imageUrl)
+    } catch {
+      // Some OS-backed video URLs can block canvas extraction. In that case keep the stable icon.
+    }
+  }
 
   return (
     <article
@@ -36,9 +66,12 @@ export function VideoCard({
         onClick={() => onPlay(media)}
         aria-label={`Play ${media.filename}`}
       >
-        {!media.isMissing ? (
+        {thumbnailUrl && !media.isMissing && (
+          <img className="h-full w-full object-cover" src={thumbnailUrl} alt="" />
+        )}
+        {!thumbnailUrl && !media.isMissing ? (
           <video
-            className="h-full w-full object-cover"
+            className="sr-only"
             src={media.url}
             preload="metadata"
             muted
@@ -49,9 +82,11 @@ export function VideoCard({
 
               video.currentTime = Math.min(video.duration * 0.1, Math.max(video.duration - 0.1, 0))
             }}
+            onSeeked={(event) => captureThumbnail(event.currentTarget)}
+            onLoadedData={(event) => captureThumbnail(event.currentTarget)}
           />
         ) : (
-          <AlertTriangle size={isGrid ? 32 : 23} />
+          media.isMissing && <AlertTriangle size={isGrid ? 32 : 23} />
         )}
         {!media.isMissing && (
           <span className="absolute text-[#f4fff8]/80">

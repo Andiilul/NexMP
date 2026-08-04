@@ -77,3 +77,28 @@
     background: transparent;
   }
 }
+
+@layer utilities {
+  @keyframes playlist-title-marquee {
+    0%,
+    12% {
+      transform: translateX(0);
+    }
+
+    88%,
+    100% {
+      transform: translateX(calc(-50% - 1rem));
+    }
+  }
+
+  .playlist-marquee-track {
+    width: max-content;
+    max-width: none;
+    transform: translateX(0);
+    will-change: transform;
+  }
+
+  .playlist-row:hover .playlist-marquee-track {
+    animation: playlist-title-marquee 7s linear infinite;
+  }
+}

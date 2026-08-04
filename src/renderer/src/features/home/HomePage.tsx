@@ -50,6 +50,7 @@ export function HomePage(): React.JSX.Element {
     null
   )
   const [playPickerMedia, setPlayPickerMedia] = useState<MediaFile[]>([])
+  const [selectedPlayPickerMediaIds, setSelectedPlayPickerMediaIds] = useState<string[]>([])
   const [isPlayPickerLoading, setIsPlayPickerLoading] = useState(false)
   const returnTo = `${location.pathname}${location.search}`
 
@@ -108,6 +109,7 @@ export function HomePage(): React.JSX.Element {
       setIsPlayPickerLoading(true)
       setPlayPickerCollection(collections.find((item) => item.id === collection.id) ?? null)
       setPlayPickerMedia([])
+      setSelectedPlayPickerMediaIds([])
 
       const mediaFiles = await window.api?.collections.listMedia(collection.id)
       const playableMedia = (mediaFiles ?? []).filter(
@@ -120,16 +122,44 @@ export function HomePage(): React.JSX.Element {
       }
 
       setPlayPickerMedia(playableMedia)
+      setSelectedPlayPickerMediaIds(playableMedia.map((media) => media.id))
     } catch (reason) {
       setPlayPickerCollection(null)
+      setSelectedPlayPickerMediaIds([])
       setError(reason instanceof Error ? reason.message : 'Unable to load playable videos.')
     } finally {
       setIsPlayPickerLoading(false)
     }
   }
 
+  const selectedPlayPickerMedia = playPickerMedia.filter((media) =>
+    selectedPlayPickerMediaIds.includes(media.id)
+  )
+
+  const closePlayPicker = (): void => {
+    setPlayPickerCollection(null)
+    setPlayPickerMedia([])
+    setSelectedPlayPickerMediaIds([])
+  }
+
+  const togglePlayPickerMedia = (mediaId: string): void => {
+    setSelectedPlayPickerMediaIds((currentIds) =>
+      currentIds.includes(mediaId)
+        ? currentIds.filter((id) => id !== mediaId)
+        : [...currentIds, mediaId]
+    )
+  }
+
+  const selectAllPlayPickerMedia = (): void => {
+    setSelectedPlayPickerMediaIds(playPickerMedia.map((media) => media.id))
+  }
+
+  const clearPlayPickerMedia = (): void => {
+    setSelectedPlayPickerMediaIds([])
+  }
+
   const openPickerMedia = (media: MediaFile): void => {
-    const playlist = createPlayablePlaylist(playPickerMedia)
+    const playlist = createPlayablePlaylist(selectedPlayPickerMedia)
     const selectedIndex = Math.max(
       playlist.findIndex((video) => video.path === media.filePath),
       0
@@ -146,9 +176,9 @@ export function HomePage(): React.JSX.Element {
   }
 
   const openAllPickerMedia = (): void => {
-    const playlist = createPlayablePlaylist(playPickerMedia)
+    const playlist = createPlayablePlaylist(selectedPlayPickerMedia)
     if (playlist.length === 0) {
-      setError('This collection does not have playable videos yet.')
+      setError('Select at least one video to play.')
       return
     }
 
@@ -259,8 +289,8 @@ export function HomePage(): React.JSX.Element {
     )
   }
 
-  const openCollectionDetail = (collectionId: string): void => {
-    navigate(`/home/collections/${collectionId}`)
+  const openCollection = (collectionId: string, search = ''): void => {
+    navigate(`/home/collections/${collectionId}${search}`)
   }
 
   const isCollectionCardActionTarget = (eventTarget: EventTarget): boolean => {
@@ -278,7 +308,7 @@ export function HomePage(): React.JSX.Element {
       onClick={(event) => {
         if (isCollectionCardActionTarget(event.target)) return
 
-        openCollectionDetail(collection.id)
+        openCollection(collection.id)
       }}
       onContextMenu={(event) => event.stopPropagation()}
     >
@@ -292,11 +322,9 @@ export function HomePage(): React.JSX.Element {
           isPinned: collection.isPinned,
           updatedLabel: `Updated ${new Date(collection.updatedAt).toLocaleDateString()}`
         }}
-        onOpen={(selectedCollection) => openCollectionDetail(selectedCollection.id)}
+        onOpen={(selectedCollection) => openCollection(selectedCollection.id)}
         onPlay={(selectedCollection) => void openPlayPicker(selectedCollection)}
-        onEdit={(selectedCollection) =>
-          navigate(`/home/collections/${selectedCollection.id}?edit=1`)
-        }
+        onEdit={(selectedCollection) => openCollection(selectedCollection.id, '?edit=1')}
         onRename={openRenameModal}
         onPin={(selectedCollection) =>
           void updateCollectionMeta(selectedCollection, {
@@ -477,51 +505,97 @@ export function HomePage(): React.JSX.Element {
               <button
                 className="grid h-8 w-8 place-items-center rounded-md text-[#a9c8bf] hover:bg-white/5 hover:text-[#f4fff8]"
                 type="button"
-                onClick={() => setPlayPickerCollection(null)}
+                onClick={closePlayPicker}
                 aria-label="Close media picker"
               >
                 <X size={17} />
               </button>
             </div>
 
-            <div className="mt-5 flex items-center justify-between gap-3">
-              <p className="text-sm text-[#a9c8bf]">
-                {isPlayPickerLoading
-                  ? 'Loading videos...'
-                  : `${playPickerMedia.length} playable videos`}
-              </p>
-              <button
-                className="inline-flex items-center gap-2 rounded-lg bg-[#00b875] px-4 py-2 text-sm font-bold text-[#04120d] transition hover:bg-[#00d982] disabled:opacity-60"
-                type="button"
-                onClick={openAllPickerMedia}
-                disabled={isPlayPickerLoading || playPickerMedia.length === 0}
-              >
-                <Play size={16} fill="currentColor" />
-                Open all
-              </button>
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm text-[#a9c8bf]">
+                  {isPlayPickerLoading
+                    ? 'Loading videos...'
+                    : `${selectedPlayPickerMedia.length} of ${playPickerMedia.length} selected`}
+                </p>
+                <p className="mt-1 text-xs text-[#a9c8bf]/75">Order follows each folder setting.</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-[#a9c8bf] transition hover:bg-white/5 hover:text-[#f4fff8] disabled:opacity-60"
+                  type="button"
+                  onClick={selectAllPlayPickerMedia}
+                  disabled={
+                    isPlayPickerLoading ||
+                    playPickerMedia.length === 0 ||
+                    selectedPlayPickerMedia.length === playPickerMedia.length
+                  }
+                >
+                  Select all
+                </button>
+                <button
+                  className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-[#a9c8bf] transition hover:bg-white/5 hover:text-[#f4fff8] disabled:opacity-60"
+                  type="button"
+                  onClick={clearPlayPickerMedia}
+                  disabled={isPlayPickerLoading || selectedPlayPickerMedia.length === 0}
+                >
+                  Clear
+                </button>
+                <button
+                  className="inline-flex items-center gap-2 rounded-lg bg-[#00b875] px-4 py-2 text-sm font-bold text-[#04120d] transition hover:bg-[#00d982] disabled:opacity-60"
+                  type="button"
+                  onClick={openAllPickerMedia}
+                  disabled={isPlayPickerLoading || selectedPlayPickerMedia.length === 0}
+                >
+                  <Play size={16} fill="currentColor" />
+                  Open selected
+                </button>
+              </div>
             </div>
 
             <div className="mt-4 max-h-[56vh] overflow-y-auto rounded-lg border border-white/10 bg-[#0d0f12]/70">
-              {playPickerMedia.map((media) => (
-                <button
-                  key={media.id}
-                  className="flex w-full items-center gap-3 border-b border-white/[0.06] px-4 py-3 text-left transition last:border-b-0 hover:bg-white/[0.06]"
-                  type="button"
-                  onClick={() => openPickerMedia(media)}
-                >
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#00b875]/12 text-[#00d982]">
-                    <Play size={16} fill="currentColor" />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-bold text-[#f4fff8]">
-                      {media.filename}
-                    </span>
-                    <span className="mt-1 block truncate text-xs text-[#a9c8bf]">
-                      {media.sourceName} - {media.filePath}
-                    </span>
-                  </span>
-                </button>
-              ))}
+              {playPickerMedia.map((media) => {
+                const isSelected = selectedPlayPickerMediaIds.includes(media.id)
+
+                return (
+                  <div
+                    key={media.id}
+                    className={`flex w-full items-center gap-3 border-b border-white/[0.06] px-4 py-3 transition last:border-b-0 ${
+                      isSelected ? 'bg-white/[0.035]' : 'opacity-60 hover:opacity-100'
+                    }`}
+                  >
+                    <input
+                      className="h-4 w-4 shrink-0 accent-[#00b875]"
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => togglePlayPickerMedia(media.id)}
+                      aria-label={`Include ${media.filename}`}
+                    />
+                    <button
+                      className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#00b875]/12 text-[#00d982] transition hover:bg-[#00b875]/20 disabled:opacity-40"
+                      type="button"
+                      onClick={() => openPickerMedia(media)}
+                      disabled={!isSelected}
+                      aria-label={`Play from ${media.filename}`}
+                    >
+                      <Play size={16} fill="currentColor" />
+                    </button>
+                    <button
+                      className="min-w-0 flex-1 text-left"
+                      type="button"
+                      onClick={() => togglePlayPickerMedia(media.id)}
+                    >
+                      <span className="block truncate text-sm font-bold text-[#f4fff8]">
+                        {media.filename}
+                      </span>
+                      <span className="mt-1 block truncate text-xs text-[#a9c8bf]">
+                        {media.sourceName} - {media.filePath}
+                      </span>
+                    </button>
+                  </div>
+                )
+              })}
             </div>
           </div>
         </div>

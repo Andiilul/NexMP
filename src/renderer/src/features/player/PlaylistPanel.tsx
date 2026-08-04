@@ -13,6 +13,8 @@ type PlaylistPanelProps = {
   onReorder: (fromIndex: number, toIndex: number) => void
 }
 
+type DropPlacement = 'before' | 'after'
+
 export function PlaylistPanel({
   isVisible,
   playlist,
@@ -24,6 +26,30 @@ export function PlaylistPanel({
 }: PlaylistPanelProps): React.JSX.Element {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  const [dropPlacement, setDropPlacement] = useState<DropPlacement>('before')
+
+  const getDropPlacement = (event: DragEvent<HTMLDivElement>): DropPlacement => {
+    const bounds = event.currentTarget.getBoundingClientRect()
+    return event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after'
+  }
+
+  const getMoveTargetIndex = (
+    fromIndex: number,
+    targetIndex: number,
+    placement: DropPlacement
+  ): number => {
+    if (placement === 'before') {
+      return fromIndex < targetIndex ? targetIndex - 1 : targetIndex
+    }
+
+    return fromIndex > targetIndex ? targetIndex + 1 : targetIndex
+  }
+
+  const resetDragState = (): void => {
+    setDraggedIndex(null)
+    setDragOverIndex(null)
+    setDropPlacement('before')
+  }
 
   const handleDragStart = (event: DragEvent<HTMLDivElement>, index: number): void => {
     setDraggedIndex(index)
@@ -38,11 +64,11 @@ export function PlaylistPanel({
     const safeFromIndex = Number.isFinite(fromIndex) ? fromIndex : draggedIndex
 
     if (safeFromIndex !== null) {
-      onReorder(safeFromIndex, index)
+      const targetIndex = getMoveTargetIndex(safeFromIndex, index, dropPlacement)
+      onReorder(safeFromIndex, targetIndex)
     }
 
-    setDraggedIndex(null)
-    setDragOverIndex(null)
+    resetDragState()
   }
 
   return (
@@ -72,6 +98,9 @@ export function PlaylistPanel({
               const isDragTarget = index === dragOverIndex && draggedIndex !== index
               const showSourceHeader =
                 index === 0 || playlist[index - 1]?.sourceName !== video.sourceName
+              const insertionMarker = isDragTarget ? (
+                <div className="h-1.5 rounded-full bg-[#00b875]/85 shadow-[0_0_16px_rgba(0,184,117,0.44)] transition-all duration-200 ease-out" />
+              ) : null
 
               return (
                 <Fragment key={video.path}>
@@ -80,13 +109,15 @@ export function PlaylistPanel({
                       {video.sourceName ?? 'Source'}
                     </div>
                   )}
+                  {dropPlacement === 'before' && insertionMarker}
                   <div
                     className={[
-                      'grid min-w-0 grid-cols-[24px_40px_minmax(0,1fr)_32px] items-center gap-2 rounded-lg border p-2 text-left transition-colors',
+                      'playlist-row grid min-w-0 grid-cols-[24px_40px_minmax(0,1fr)_32px] items-center gap-2 rounded-lg border p-2 text-left transition-all duration-200 ease-out',
                       isActive
                         ? 'border-white/20 bg-white/[0.085]'
                         : 'border-white/10 bg-white/[0.035] hover:bg-white/[0.06]',
-                      isDragTarget ? 'ring-1 ring-white/45' : ''
+                      isDragTarget ? 'border-[#00b875]/55 bg-[#00b875]/[0.06]' : '',
+                      draggedIndex === index ? 'scale-[0.985] opacity-45' : ''
                     ].join(' ')}
                     draggable
                     onDragStart={(event) => handleDragStart(event, index)}
@@ -94,11 +125,14 @@ export function PlaylistPanel({
                       event.preventDefault()
                       event.dataTransfer.dropEffect = 'move'
                       setDragOverIndex(index)
+                      setDropPlacement(getDropPlacement(event))
                     }}
-                    onDragEnd={() => {
-                      setDraggedIndex(null)
-                      setDragOverIndex(null)
+                    onDragEnter={(event) => {
+                      if (draggedIndex === null || draggedIndex === index) return
+                      setDragOverIndex(index)
+                      setDropPlacement(getDropPlacement(event))
                     }}
+                    onDragEnd={resetDragState}
                     onDrop={(event) => handleDrop(event, index)}
                   >
                     <span className="grid cursor-grab place-items-center text-[#ebeef8]/45 active:cursor-grabbing">
@@ -117,8 +151,16 @@ export function PlaylistPanel({
                       type="button"
                       onClick={() => onPlay(index, true)}
                     >
-                      <span className="block overflow-hidden text-ellipsis whitespace-nowrap text-sm font-semibold text-[#f3f5fb]">
-                        {video.name}
+                      <span
+                        className="playlist-marquee block overflow-hidden whitespace-nowrap text-sm font-semibold text-[#f3f5fb]"
+                        title={video.name}
+                      >
+                        <span className="playlist-marquee-track inline-flex gap-8">
+                          <span className="shrink-0">{video.name}</span>
+                          <span className="shrink-0" aria-hidden="true">
+                            {video.name}
+                          </span>
+                        </span>
                       </span>
                       <span className="mt-0.5 block overflow-hidden text-ellipsis whitespace-nowrap text-xs text-[#ebeef8]/55">
                         {video.path}
@@ -135,6 +177,7 @@ export function PlaylistPanel({
                       </button>
                     </Tooltip>
                   </div>
+                  {dropPlacement === 'after' && insertionMarker}
                 </Fragment>
               )
             })}

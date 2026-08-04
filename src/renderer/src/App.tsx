@@ -9,29 +9,32 @@ import { CollectionSourcePage } from './features/collections/CollectionSourcePag
 import { SearchPage } from './features/search/SearchPage'
 import { PlayerPage } from './features/player/PlayerPage'
 import { ProfilePage } from './features/profile/ProfilePage'
+import { ToastProvider } from './components/ToastProvider'
 
 function App(): React.JSX.Element {
   return (
-    <MemoryRouter>
-      <Routes>
-        <Route path="/" element={<ProfilePage />} />
-        <Route path="/home" element={<HomeLayout />}>
-          <Route index element={<HomePage />} />
-          <Route path="collections" element={<Navigate to="/home" replace />} />
-          <Route path="collections/new" element={<CollectionFormPage />} />
-          <Route path="collections/:collectionId" element={<CollectionDetailPage />} />
-          <Route
-            path="collections/:collectionId/sources/:sourceId"
-            element={<CollectionSourcePage />}
-          />
-          <Route path="continue" element={<ContinueWatchingPage />} />
-          <Route path="search" element={<SearchPage />} />
-          <Route path="settings" element={<SettingsPage />} />
-        </Route>
-        <Route path="/player" element={<PlayerPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </MemoryRouter>
+    <ToastProvider>
+      <MemoryRouter>
+        <Routes>
+          <Route path="/" element={<ProfilePage />} />
+          <Route path="/home" element={<HomeLayout />}>
+            <Route index element={<HomePage />} />
+            <Route path="collections" element={<Navigate to="/home" replace />} />
+            <Route path="collections/new" element={<CollectionFormPage />} />
+            <Route path="collections/:collectionId" element={<CollectionDetailPage />} />
+            <Route
+              path="collections/:collectionId/sources/:sourceId"
+              element={<CollectionSourcePage />}
+            />
+            <Route path="continue" element={<ContinueWatchingPage />} />
+            <Route path="search" element={<SearchPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+          </Route>
+          <Route path="/player" element={<PlayerPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </MemoryRouter>
+    </ToastProvider>
   )
 }
 

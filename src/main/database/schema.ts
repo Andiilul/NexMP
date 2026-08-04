@@ -53,6 +53,9 @@ export const collectionSources = sqliteTable(
     name: text('name').notNull(),
     sourcePath: text('source_path').notNull(),
     sortOrder: integer('sort_order').notNull().default(0),
+    mediaOrder: text('media_order', { enum: ['custom', 'name', 'date'] })
+      .notNull()
+      .default('name'),
     isMissing: integer('is_missing', { mode: 'boolean' }).notNull().default(false),
     isDynamic: integer('is_dynamic', { mode: 'boolean' }).notNull().default(true),
     lastScannedAt: text('last_scanned_at'),

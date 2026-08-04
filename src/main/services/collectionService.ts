@@ -9,10 +9,12 @@ import type {
   CollectionWithSources,
   CreateCollectionInput,
   MediaFile,
+  SourceMediaOrder,
   SourceMediaPreview,
   Tag,
   UpdateCollectionInput,
   UpdateCollectionSourceInput,
+  UpdateSourceMediaOrderInput,
   UpdateMediaFileInput
 } from '../../shared/types/collection'
 import { getDatabase } from '../database'
@@ -27,9 +29,33 @@ import {
 import { createMediaProtocolUrl } from '../media/mediaProtocol'
 
 const supportedMediaExtensions = new Set(['.mp4', '.mkv', '.webm', '.mov', '.avi', '.m4v'])
+const sourceMediaOrders = new Set<SourceMediaOrder>(['custom', 'name', 'date'])
 
 function normalizeName(name: string): string {
   return name.trim().replace(/\s+/g, ' ')
+}
+
+function normalizeSourceMediaOrder(mediaOrder: string): SourceMediaOrder {
+  return sourceMediaOrders.has(mediaOrder as SourceMediaOrder)
+    ? (mediaOrder as SourceMediaOrder)
+    : 'name'
+}
+
+function compareMediaName(
+  firstMedia: Pick<MediaFile, 'filename'>,
+  secondMedia: Pick<MediaFile, 'filename'>
+): number {
+  return firstMedia.filename.localeCompare(secondMedia.filename, undefined, {
+    numeric: true,
+    sensitivity: 'base'
+  })
+}
+
+function getMediaDateValue(media: Pick<MediaFile, 'modifiedAt'>): number {
+  if (!media.modifiedAt) return 0
+
+  const value = new Date(media.modifiedAt).getTime()
+  return Number.isFinite(value) ? value : 0
 }
 
 function getCollectionWithSources(collectionId: string): CollectionWithSources {
@@ -343,7 +369,7 @@ export function listTags(profileId: string): Tag[] {
 
 export function listCollectionMedia(collectionId: string): MediaFile[] {
   const database = getDatabase()
-  return database
+  const mediaRows = database
     .select({
       id: mediaFiles.id,
       collectionSourceId: mediaFiles.collectionSourceId,
@@ -351,12 +377,16 @@ export function listCollectionMedia(collectionId: string): MediaFile[] {
       sourceName: collectionSources.name,
       sourcePath: collectionSources.sourcePath,
       sourceIsDynamic: collectionSources.isDynamic,
+      sourceMediaOrder: collectionSources.mediaOrder,
+      sourceSortOrder: collectionSources.sortOrder,
       filePath: mediaFiles.filePath,
       filename: mediaFiles.filename,
       extension: mediaFiles.extension,
       sizeBytes: mediaFiles.sizeBytes,
+      modifiedAt: mediaFiles.modifiedAt,
       isMissing: mediaFiles.isMissing,
-      isPending: mediaFiles.isPending
+      isPending: mediaFiles.isPending,
+      mediaSortOrder: mediaFiles.sortOrder
     })
     .from(mediaFiles)
     .innerJoin(collectionSources, eq(mediaFiles.collectionSourceId, collectionSources.id))
@@ -364,8 +394,47 @@ export function listCollectionMedia(collectionId: string): MediaFile[] {
     .where(eq(collectionSources.collectionId, collectionId))
     .orderBy(asc(collectionSources.sortOrder), asc(mediaFiles.sortOrder))
     .all()
+
+  return mediaRows
+    .sort((firstMedia, secondMedia) => {
+      const sourceComparison = firstMedia.sourceSortOrder - secondMedia.sourceSortOrder
+      if (sourceComparison !== 0) return sourceComparison
+
+      const mediaOrder = normalizeSourceMediaOrder(firstMedia.sourceMediaOrder)
+      if (mediaOrder === 'date') {
+        return (
+          getMediaDateValue(secondMedia) - getMediaDateValue(firstMedia) ||
+          compareMediaName(firstMedia, secondMedia) ||
+          firstMedia.mediaSortOrder - secondMedia.mediaSortOrder
+        )
+      }
+      if (mediaOrder === 'name') {
+        return (
+          compareMediaName(firstMedia, secondMedia) ||
+          firstMedia.mediaSortOrder - secondMedia.mediaSortOrder
+        )
+      }
+
+      return (
+        firstMedia.mediaSortOrder - secondMedia.mediaSortOrder ||
+        compareMediaName(firstMedia, secondMedia)
+      )
+    })
     .map((media) => ({
-      ...media,
+      id: media.id,
+      collectionSourceId: media.collectionSourceId,
+      collectionName: media.collectionName,
+      sourceName: media.sourceName,
+      sourcePath: media.sourcePath,
+      sourceIsDynamic: media.sourceIsDynamic,
+      sourceMediaOrder: normalizeSourceMediaOrder(media.sourceMediaOrder),
+      filePath: media.filePath,
+      filename: media.filename,
+      extension: media.extension,
+      sizeBytes: media.sizeBytes,
+      modifiedAt: media.modifiedAt,
+      isMissing: media.isMissing,
+      isPending: media.isPending,
       url: createMediaProtocolUrl(media.filePath)
     }))
 }
@@ -557,6 +626,30 @@ export function updateCollectionSources(
   }
 
   return getCollectionWithSources(collectionId)
+}
+
+export function updateCollectionSourceMediaOrder(
+  input: UpdateSourceMediaOrderInput
+): CollectionWithSources {
+  const database = getDatabase()
+  const source = database
+    .select({ collectionId: collectionSources.collectionId })
+    .from(collectionSources)
+    .where(eq(collectionSources.id, input.sourceId))
+    .get()
+  if (!source) throw new Error('Source not found.')
+
+  const mediaOrder = normalizeSourceMediaOrder(input.mediaOrder)
+  database
+    .update(collectionSources)
+    .set({
+      mediaOrder,
+      updatedAt: new Date().toISOString()
+    })
+    .where(eq(collectionSources.id, input.sourceId))
+    .run()
+
+  return getCollectionWithSources(source.collectionId)
 }
 
 export function updateMediaFiles(

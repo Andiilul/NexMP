@@ -4,18 +4,15 @@ import { useLocation, useNavigate, useParams, useSearchParams } from 'react-rout
 import type {
   CollectionSource,
   CollectionWithSources,
-  MediaFile
+  MediaFile,
+  SourceMediaOrder
 } from '../../../../shared/types/collection'
-import { CollectionDataViewer } from './CollectionDataViewer'
 import { createPlayablePlaylist, type PlayerRouteState } from './mediaPlayback'
-import { VideoCard } from './VideoCard'
-
-type MediaEditDraft = {
-  id: string
-  filename: string
-  sortOrder: number
-  media: MediaFile
-}
+import {
+  MediaFilesViewer,
+  type MediaEditDraft,
+  type SmartRenameSaveInput
+} from './MediaFilesViewer'
 
 export function CollectionSourcePage(): React.JSX.Element {
   const { collectionId, sourceId } = useParams()
@@ -27,8 +24,6 @@ export function CollectionSourcePage(): React.JSX.Element {
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([])
   const [editSourceName, setEditSourceName] = useState('')
   const [editMedia, setEditMedia] = useState<MediaEditDraft[]>([])
-  const [renameMedia, setRenameMedia] = useState<MediaEditDraft | null>(null)
-  const [renameValue, setRenameValue] = useState('')
   const [isEditing, setIsEditing] = useState(searchParams.get('edit') === '1')
   const [isSaving, setIsSaving] = useState(false)
   const [isScanning, setIsScanning] = useState(false)
@@ -223,16 +218,84 @@ export function CollectionSourcePage(): React.JSX.Element {
     }
   }
 
-  const submitRenameMedia = (): void => {
-    if (!renameMedia) return
+  const renameMediaDraft = (mediaId: string, filename: string): void => {
     setEditMedia((current) =>
       current.map((media) =>
-        media.id === renameMedia.id
-          ? { ...media, filename: renameValue, media: { ...media.media, filename: renameValue } }
-          : media
+        media.id === mediaId ? { ...media, filename, media: { ...media.media, filename } } : media
       )
     )
-    setRenameMedia(null)
+  }
+
+  const updateSourceMediaOrder = async (mediaOrder: SourceMediaOrder): Promise<void> => {
+    if (!sourceId) return
+
+    try {
+      setError(null)
+      const nextCollection = await window.api?.collections.updateSourceMediaOrder({
+        sourceId,
+        mediaOrder
+      })
+      const nextSource =
+        nextCollection?.sources.find((item) => item.id === sourceId) ??
+        (source ? { ...source, mediaOrder } : null)
+      const nextMediaFiles = await window.api?.collections.listSourceMedia(sourceId)
+
+      setCollection(nextCollection ?? collection)
+      setSource(nextSource)
+      setMediaFiles(nextMediaFiles ?? [])
+      applyEditState(nextSource, nextMediaFiles ?? [])
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to update media order.')
+    }
+  }
+
+  const saveSmartRename = async (renames: SmartRenameSaveInput[]): Promise<void> => {
+    if (!collectionId) return
+
+    const renameById = new Map(renames.map((rename) => [rename.id, rename.filename]))
+    const baseMedia = isEditing
+      ? editMedia
+      : mediaFiles.map((media, index) => ({
+          id: media.id,
+          filename: media.filename,
+          sortOrder: index,
+          media
+        }))
+
+    try {
+      setIsSaving(true)
+      setError(null)
+      const nextCollectionMedia = await window.api?.collections.updateMedia(
+        collectionId,
+        baseMedia.map((media, index) => ({
+          id: media.id,
+          filename: renameById.get(media.id) ?? media.filename,
+          sortOrder: index
+        }))
+      )
+      const nextSourceMedia = (nextCollectionMedia ?? []).filter(
+        (media) => media.collectionSourceId === sourceId
+      )
+      const nextMediaById = new Map(nextSourceMedia.map((media) => [media.id, media]))
+      setMediaFiles(nextSourceMedia)
+      setEditMedia(
+        baseMedia.map((media, index) => {
+          const filename = renameById.get(media.id) ?? media.filename
+          const nextMedia = nextMediaById.get(media.id) ?? media.media
+          return {
+            id: media.id,
+            filename,
+            sortOrder: index,
+            media: { ...nextMedia, filename }
+          }
+        })
+      )
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to save smart rename changes.')
+      throw reason
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   if (!source && !error) return <p className="text-[#a9c8bf]">Loading source...</p>
@@ -342,87 +405,19 @@ export function CollectionSourcePage(): React.JSX.Element {
             </div>
           </div>
 
-          <section className="mt-10">
-            <h2 className="mb-4 text-lg font-bold">Videos</h2>
-            {isEditing ? (
-              <CollectionDataViewer
-                items={editMedia}
-                getId={(item) => item.id}
-                isEditing
-                onMove={moveMedia}
-                emptyState={
-                  <div className="rounded-xl border border-dashed border-white/15 p-8 text-center text-[#a9c8bf]">
-                    No videos found yet.
-                  </div>
-                }
-                renderItem={(item, viewMode) => (
-                  <VideoCard
-                    media={{ ...item.media, filename: item.filename }}
-                    viewMode={viewMode}
-                    onPlay={playMedia}
-                    onRename={() => {
-                      setRenameMedia(item)
-                      setRenameValue(item.filename)
-                    }}
-                  />
-                )}
-              />
-            ) : (
-              <CollectionDataViewer
-                items={mediaFiles}
-                getId={(item) => item.id}
-                emptyState={
-                  <div className="rounded-xl border border-dashed border-white/15 p-8 text-center text-[#a9c8bf]">
-                    No videos found yet.
-                  </div>
-                }
-                renderItem={(item, viewMode) => (
-                  <VideoCard media={item} viewMode={viewMode} onPlay={playMedia} />
-                )}
-              />
-            )}
-          </section>
+          <MediaFilesViewer
+            title="Videos"
+            mediaFiles={mediaFiles}
+            editMedia={editMedia}
+            isEditing={isEditing}
+            orderBy={source.mediaOrder}
+            onOrderChange={updateSourceMediaOrder}
+            onMove={moveMedia}
+            onPlay={playMedia}
+            onRenameDraft={renameMediaDraft}
+            onSmartRenameSave={saveSmartRename}
+          />
         </>
-      )}
-
-      {renameMedia && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 px-4">
-          <div className="w-full max-w-md rounded-xl border border-white/10 bg-[#171a1f] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.48)]">
-            <div className="flex items-center justify-between gap-4">
-              <h2 className="text-lg font-bold">Rename video</h2>
-              <button
-                className="grid h-8 w-8 place-items-center rounded-md text-[#a9c8bf] hover:bg-white/5 hover:text-[#f4fff8]"
-                type="button"
-                onClick={() => setRenameMedia(null)}
-              >
-                <X size={17} />
-              </button>
-            </div>
-            <input
-              className="mt-5 w-full rounded-lg border border-white/15 bg-[#0d0f12] px-4 py-3 text-[#f4fff8] outline-none focus:border-[#00b875]"
-              value={renameValue}
-              onChange={(event) => setRenameValue(event.target.value)}
-              autoFocus
-            />
-            <div className="mt-5 flex justify-end gap-3">
-              <button
-                className="rounded-lg px-4 py-2.5 font-semibold text-[#a9c8bf] hover:bg-white/5"
-                type="button"
-                onClick={() => setRenameMedia(null)}
-              >
-                Cancel
-              </button>
-              <button
-                className="rounded-lg bg-[#00b875] px-4 py-2.5 font-bold text-[#04120d] disabled:opacity-60"
-                type="button"
-                onClick={submitRenameMedia}
-                disabled={!renameValue.trim()}
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   )
