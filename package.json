@@ -1,6 +1,6 @@
 {
   "name": "nexmp",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "A connected local media manager and player for Windows.",
   "main": "./out/main/index.js",
   "bin": {
