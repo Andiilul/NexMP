@@ -1,7 +1,5 @@
 import {
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Clock3,
   LayoutGrid,
   Plus,
@@ -13,6 +11,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import type { Profile } from '../../../../shared/types/profile'
 import { useAppState } from '../../components/useAppState'
+import logoIcon from '../../../../../public/logos/logo-icon.png'
 
 const navigation = [
   { label: 'Home', icon: LayoutGrid, path: '/home' },
@@ -41,6 +40,9 @@ export function Sidebar({ onAddCollection }: SidebarProps): React.JSX.Element {
   } = useAppState()
   const [activeProfile, setActiveProfile] = useState<Profile | null>(null)
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const navItemClassName = `flex w-full items-center rounded-lg py-2.5 text-left transition ${
+    isCollapsed ? 'justify-center px-0' : 'gap-3 px-3'
+  }`
 
   const isRouteActive = (path: string): boolean => {
     if (path === '/home') return location.pathname === path
@@ -73,33 +75,28 @@ export function Sidebar({ onAddCollection }: SidebarProps): React.JSX.Element {
 
   return (
     <aside
-      className={`flex h-full shrink-0 flex-col gap-9 overflow-y-auto border-r border-white/[0.07] bg-[#131518] p-4 transition-[width] duration-200 ease-out ${
+      className={`flex h-full shrink-0 flex-col gap-9 overflow-hidden border-r border-white/[0.07] bg-[#131518] p-4 transition-[width] duration-200 ease-out ${
         isCollapsed ? 'w-20' : 'w-64'
       }`}
     >
-      <div className={`flex items-center gap-3 px-2 ${isCollapsed ? 'justify-center' : ''}`}>
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#00b875] text-lg font-black text-[#04120d]">
-          N
-        </span>
+      <div className={`flex h-10 items-center ${isCollapsed ? 'justify-center' : 'gap-3 px-2'}`}>
+        <button
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[#e9edf9] transition hover:bg-white"
+          type="button"
+          onClick={() => setIsCollapsed((current) => !current)}
+          aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          <img className="h-7 w-7 object-contain" src={logoIcon} alt="" />
+        </button>
         {!isCollapsed && (
-          <>
-            <span className="min-w-0 flex-1 text-lg font-bold tracking-tight text-[#f4fff8]">
-              NexMP
-            </span>
-            <button
-              className="grid h-8 w-8 place-items-center rounded-md text-[#a9c8bf] transition hover:bg-white/5 hover:text-[#f4fff8]"
-              type="button"
-              onClick={() => setIsCollapsed(true)}
-              aria-label="Collapse sidebar"
-              title="Collapse sidebar"
-            >
-              <ChevronLeft size={17} />
-            </button>
-          </>
+          <span className="min-w-0 flex-1 text-lg font-bold tracking-tight text-[#f4fff8]">
+            NexMP
+          </span>
         )}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col justify-between gap-8">
+      <div className="flex min-h-0 flex-1 flex-col justify-between gap-8 overflow-y-auto overflow-x-hidden">
         <div className="flex flex-col gap-8">
           <nav className="flex flex-col gap-1" aria-label="Main navigation">
             {navigation.map(({ label, icon: Icon, path }) => {
@@ -108,9 +105,7 @@ export function Sidebar({ onAddCollection }: SidebarProps): React.JSX.Element {
               return (
                 <button
                   key={label}
-                  className={`flex w-full items-center rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition ${
-                    isCollapsed ? 'justify-center' : 'gap-3'
-                  } ${
+                  className={`${navItemClassName} text-sm font-semibold transition ${
                     active
                       ? 'bg-[#00b875]/12 text-[#00d982]'
                       : 'text-[#a9c8bf] hover:bg-white/5 hover:text-[#f4fff8]'
@@ -122,8 +117,8 @@ export function Sidebar({ onAddCollection }: SidebarProps): React.JSX.Element {
                   title={isCollapsed ? label : undefined}
                   aria-label={label}
                 >
-                  <Icon size={18} />
-                  {!isCollapsed && label}
+                  <Icon size={18} className="shrink-0" />
+                  {!isCollapsed && <span className="min-w-0 truncate">{label}</span>}
                 </button>
               )
             })}
@@ -131,23 +126,21 @@ export function Sidebar({ onAddCollection }: SidebarProps): React.JSX.Element {
 
           <div className="border-t border-white/[0.07] pt-6">
             <button
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#00b875] px-3 py-2.5 text-sm font-bold text-[#04120d] transition hover:bg-[#00d982]"
+              className={`${navItemClassName} bg-[#00b875] text-sm font-bold text-[#04120d] transition hover:bg-[#00d982]`}
               type="button"
               onClick={onAddCollection}
               title={isCollapsed ? 'Add Collection' : undefined}
               aria-label="Add Collection"
             >
-              <Plus size={18} />
-              {!isCollapsed && 'Add Collection'}
+              <Plus size={18} className="shrink-0" />
+              {!isCollapsed && <span className="min-w-0 truncate">Add Collection</span>}
             </button>
           </div>
         </div>
 
         <div className="flex flex-col gap-2 border-t border-white/[0.07] pt-4">
           <button
-            className={`flex w-full items-center rounded-lg px-2 py-2.5 text-left transition hover:bg-white/5 ${
-              isCollapsed ? 'justify-center' : 'gap-3'
-            }`}
+            className={`${navItemClassName} transition hover:bg-white/5`}
             type="button"
             onClick={() => {
               clearLoginProfile()
@@ -157,7 +150,7 @@ export function Sidebar({ onAddCollection }: SidebarProps): React.JSX.Element {
             aria-label="Switch profile"
           >
             <span
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#176b61] text-xs font-bold text-white"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#176b61] text-xs font-bold text-white"
               style={activeProfile ? { backgroundColor: activeProfile.avatarColor } : undefined}
             >
               {activeProfile ? getInitials(activeProfile.name) : 'ME'}
@@ -176,9 +169,7 @@ export function Sidebar({ onAddCollection }: SidebarProps): React.JSX.Element {
           </button>
 
           <button
-            className={`flex w-full items-center rounded-lg px-3 py-2.5 text-sm font-semibold transition ${
-              isCollapsed ? 'justify-center' : 'gap-3'
-            } ${
+            className={`${navItemClassName} text-sm font-semibold transition ${
               isRouteActive('/home/settings')
                 ? 'bg-[#00b875]/12 text-[#00d982]'
                 : 'text-[#a9c8bf] hover:bg-white/5 hover:text-[#f4fff8]'
@@ -188,21 +179,9 @@ export function Sidebar({ onAddCollection }: SidebarProps): React.JSX.Element {
             title={isCollapsed ? 'Settings' : undefined}
             aria-label="Settings"
           >
-            <Settings size={18} />
-            {!isCollapsed && 'Settings'}
+            <Settings size={18} className="shrink-0" />
+            {!isCollapsed && <span className="min-w-0 truncate">Settings</span>}
           </button>
-
-          {isCollapsed && (
-            <button
-              className="grid h-10 w-full place-items-center rounded-lg text-[#a9c8bf] transition hover:bg-white/5 hover:text-[#f4fff8]"
-              type="button"
-              onClick={() => setIsCollapsed(false)}
-              aria-label="Expand sidebar"
-              title="Expand sidebar"
-            >
-              <ChevronRight size={17} />
-            </button>
-          )}
         </div>
       </div>
     </aside>
