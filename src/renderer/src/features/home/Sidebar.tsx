@@ -40,9 +40,12 @@ export function Sidebar({ onAddCollection }: SidebarProps): React.JSX.Element {
   } = useAppState()
   const [activeProfile, setActiveProfile] = useState<Profile | null>(null)
   const [isCollapsed, setIsCollapsed] = useState(false)
-  const navItemClassName = `flex w-full items-center rounded-lg py-2.5 text-left transition ${
+  const navItemClassName = `flex w-full items-center rounded-lg py-2.5 text-left ${
     isCollapsed ? 'justify-center px-0' : 'gap-3 px-3'
   }`
+  const toggleCollapsed = (): void => {
+    setIsCollapsed((current) => !current)
+  }
 
   const isRouteActive = (path: string): boolean => {
     if (path === '/home') return location.pathname === path
@@ -75,17 +78,16 @@ export function Sidebar({ onAddCollection }: SidebarProps): React.JSX.Element {
 
   return (
     <aside
-      className={`flex h-full shrink-0 flex-col gap-9 overflow-hidden border-r border-white/[0.07] bg-[#131518] p-4 transition-[width] duration-200 ease-out ${
+      className={`flex h-full shrink-0 flex-col gap-9 overflow-hidden border-r border-white/[0.07] bg-[#131518] p-4 ${
         isCollapsed ? 'w-20' : 'w-64'
       }`}
     >
       <div className={`flex h-10 items-center ${isCollapsed ? 'justify-center' : 'gap-3 px-2'}`}>
         <button
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[#e9edf9] transition hover:bg-white"
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[#e9edf9] hover:bg-white"
           type="button"
-          onClick={() => setIsCollapsed((current) => !current)}
-          aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label="NexMP"
+          title="NexMP"
         >
           <img className="h-7 w-7 object-contain" src={logoIcon} alt="" />
         </button>
@@ -98,14 +100,18 @@ export function Sidebar({ onAddCollection }: SidebarProps): React.JSX.Element {
 
       <div className="flex min-h-0 flex-1 flex-col justify-between gap-8 overflow-y-auto overflow-x-hidden">
         <div className="flex flex-col gap-8">
-          <nav className="flex flex-col gap-1" aria-label="Main navigation">
+          <nav
+            className="flex flex-col gap-1"
+            aria-label="Main navigation"
+            onDoubleClick={toggleCollapsed}
+          >
             {navigation.map(({ label, icon: Icon, path }) => {
               const active = path !== null && isRouteActive(path)
 
               return (
                 <button
                   key={label}
-                  className={`${navItemClassName} text-sm font-semibold transition ${
+                  className={`${navItemClassName} text-sm font-semibold ${
                     active
                       ? 'bg-[#00b875]/12 text-[#00d982]'
                       : 'text-[#a9c8bf] hover:bg-white/5 hover:text-[#f4fff8]'
@@ -126,7 +132,7 @@ export function Sidebar({ onAddCollection }: SidebarProps): React.JSX.Element {
 
           <div className="border-t border-white/[0.07] pt-6">
             <button
-              className={`${navItemClassName} bg-[#00b875] text-sm font-bold text-[#04120d] transition hover:bg-[#00d982]`}
+              className={`${navItemClassName} bg-[#00b875] text-sm font-bold text-[#04120d] hover:bg-[#00d982]`}
               type="button"
               onClick={onAddCollection}
               title={isCollapsed ? 'Add Collection' : undefined}
@@ -138,9 +144,12 @@ export function Sidebar({ onAddCollection }: SidebarProps): React.JSX.Element {
           </div>
         </div>
 
-        <div className="flex flex-col gap-2 border-t border-white/[0.07] pt-4">
+        <div
+          className="flex flex-col gap-2 border-t border-white/[0.07] pt-4"
+          onDoubleClick={toggleCollapsed}
+        >
           <button
-            className={`${navItemClassName} transition hover:bg-white/5`}
+            className={`${navItemClassName} hover:bg-white/5`}
             type="button"
             onClick={() => {
               clearLoginProfile()
@@ -169,7 +178,7 @@ export function Sidebar({ onAddCollection }: SidebarProps): React.JSX.Element {
           </button>
 
           <button
-            className={`${navItemClassName} text-sm font-semibold transition ${
+            className={`${navItemClassName} text-sm font-semibold ${
               isRouteActive('/home/settings')
                 ? 'bg-[#00b875]/12 text-[#00d982]'
                 : 'text-[#a9c8bf] hover:bg-white/5 hover:text-[#f4fff8]'
