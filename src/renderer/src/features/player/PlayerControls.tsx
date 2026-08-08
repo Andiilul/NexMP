@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from 'react'
 import {
+  Captions,
   Keyboard,
   List,
   Maximize,
@@ -23,6 +24,9 @@ type PlayerControlsProps = {
   duration: number
   volume: number
   aspectRatioLabel: string
+  subtitlesEnabled: boolean
+  subtitleTrackCount: number
+  activeSubtitleLabel?: string | null
   canPlayPrevious: boolean
   canPlayNext: boolean
   onChangeVolume: (volume: number) => void
@@ -30,6 +34,7 @@ type PlayerControlsProps = {
   onControlsLeave: () => void
   onSeek: (seconds: number) => void
   onCycleAspectRatio: () => void
+  onToggleSubtitles: () => void
   onPlayPrevious: () => void
   onPlayNext: () => void
   onOpenHotkeys: () => void
@@ -75,10 +80,14 @@ export function PlayerControls({
   duration,
   volume,
   aspectRatioLabel,
+  subtitlesEnabled,
+  subtitleTrackCount,
+  activeSubtitleLabel,
   canPlayPrevious,
   canPlayNext,
   onChangeVolume,
   onCycleAspectRatio,
+  onToggleSubtitles,
   onControlsEnter,
   onControlsLeave,
   onOpenHotkeys,
@@ -455,6 +464,24 @@ export function PlayerControls({
               aria-label={`Aspect ratio: ${aspectRatioLabel}`}
             >
               <Ratio size={22} />
+            </button>
+          </Tooltip>
+          <Tooltip
+            content={
+              subtitleTrackCount > 0
+                ? subtitlesEnabled
+                  ? `Subtitle: ${activeSubtitleLabel ?? 'On'}`
+                  : 'Subtitles off'
+                : 'No subtitles'
+            }
+          >
+            <button
+              className={`${iconButtonClass} ${subtitlesEnabled && subtitleTrackCount > 0 ? 'bg-white/[0.12]' : ''}`}
+              type="button"
+              onClick={onToggleSubtitles}
+              aria-label="Toggle subtitles"
+            >
+              <Captions size={22} />
             </button>
           </Tooltip>
         </div>

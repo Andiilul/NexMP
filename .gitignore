@@ -6,6 +6,7 @@ out
 *.log*
 
 # Local development and generated artifacts
+.nexmp-dev/
 tmp/
 release/
 coverage/

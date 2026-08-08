@@ -98,6 +98,28 @@ const migrations: Migration[] = [
     sql: `
       ALTER TABLE collection_sources ADD COLUMN media_order TEXT NOT NULL DEFAULT 'name';
     `
+  },
+  {
+    version: 6,
+    sql: `
+      CREATE TABLE playback_sessions (
+        id TEXT PRIMARY KEY,
+        profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+        playlist_key TEXT NOT NULL,
+        playlist_json TEXT NOT NULL,
+        collection_name TEXT,
+        active_index INTEGER NOT NULL DEFAULT 0,
+        active_media_file_id TEXT REFERENCES media_files(id) ON DELETE SET NULL,
+        position_seconds INTEGER NOT NULL DEFAULT 0,
+        duration_seconds INTEGER,
+        completed INTEGER NOT NULL DEFAULT 0,
+        last_played_at TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE UNIQUE INDEX playback_sessions_profile_playlist_unique ON playback_sessions (profile_id, playlist_key);
+      CREATE INDEX playback_sessions_profile_last_played_index ON playback_sessions (profile_id, last_played_at);
+    `
   }
 ]
 

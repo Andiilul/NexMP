@@ -1,7 +1,8 @@
 import { ArrowLeft, ChevronDown, FolderOpen, Plus, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { SourceMediaPreview, Tag } from '../../../../shared/types/collection'
+import { ThumbnailPicker, type ThumbnailPickerValue } from '../../components/ThumbnailPicker'
 import { formatTagName } from '../tags/tagDisplay'
 
 type SourceDraft = {
@@ -11,6 +12,13 @@ type SourceDraft = {
   selectedFilePaths: string[]
   isDynamic: boolean
   isPreviewOpen: boolean
+}
+
+const TAG_COLOR_PRESETS = ['#00b875', '#00a6ff', '#ffb020', '#ff6f60', '#b56cff', '#38d9a9']
+const emptyThumbnailValue: ThumbnailPickerValue = {
+  coverImage: null,
+  previewUrl: null,
+  removeCover: false
 }
 
 function getFolderName(sourcePath: string): string {
@@ -26,7 +34,22 @@ export function CollectionFormPage(): React.JSX.Element {
   const [tags, setTags] = useState<Tag[]>([])
   const [tagIds, setTagIds] = useState<string[]>([])
   const [newTagName, setNewTagName] = useState('')
+  const [newTagColor, setNewTagColor] = useState(TAG_COLOR_PRESETS[0])
   const [sources, setSources] = useState<SourceDraft[]>([])
+  const [thumbnail, setThumbnail] = useState<ThumbnailPickerValue>(emptyThumbnailValue)
+  const [hasPendingThumbnail, setHasPendingThumbnail] = useState(false)
+  const thumbnailVideoOptions = useMemo(
+    () =>
+      sources.flatMap((source) =>
+        source.preview.map((media) => ({
+          id: media.filePath,
+          name: `${source.name} / ${media.filename}`,
+          url: media.url,
+          sizeBytes: media.sizeBytes
+        }))
+      ),
+    [sources]
+  )
 
   useEffect(() => {
     const profileId = sessionStorage.getItem('nexmp.active-profile-id')
@@ -37,11 +60,12 @@ export function CollectionFormPage(): React.JSX.Element {
   const addTag = async (): Promise<void> => {
     const profileId = sessionStorage.getItem('nexmp.active-profile-id')
     if (!profileId || !newTagName.trim()) return
-    const tag = await window.api?.collections.createTag(profileId, newTagName, '#00b875')
+    const tag = await window.api?.collections.createTag(profileId, newTagName, newTagColor)
     if (!tag) return
     setTags((current) => [...current, tag])
     setTagIds((current) => [...current, tag.id])
     setNewTagName('')
+    setNewTagColor(TAG_COLOR_PRESETS[0])
   }
 
   const previewSource = async (sourcePath: string): Promise<SourceDraft> => {
@@ -94,6 +118,7 @@ export function CollectionFormPage(): React.JSX.Element {
         sourcePaths: sources.map((source) => source.sourcePath),
         sourceDynamic: true,
         tagIds,
+        coverImage: thumbnail.coverImage,
         sources: sources.map((source) => ({
           name: source.name,
           sourcePath: source.sourcePath,
@@ -141,6 +166,12 @@ export function CollectionFormPage(): React.JSX.Element {
               autoFocus
             />
           </div>
+          <ThumbnailPicker
+            value={thumbnail}
+            videoOptions={thumbnailVideoOptions}
+            onChange={setThumbnail}
+            onPendingChange={setHasPendingThumbnail}
+          />
           <div className="flex flex-col gap-2">
             <p className="text-sm font-semibold">
               Sources <span className="font-normal text-[#a9c8bf]">(optional)</span>
@@ -325,13 +356,34 @@ export function CollectionFormPage(): React.JSX.Element {
                 </button>
               ))}
             </div>
-            <div className="flex gap-2 pt-1">
+            <div className="flex flex-wrap items-center gap-2 pt-1">
               <input
                 className="min-w-0 flex-1 rounded-lg border border-white/15 bg-[#0d0f12] px-3 py-2 text-sm outline-none focus:border-[#00b875]"
                 placeholder="Create a new tag"
                 value={newTagName}
                 onChange={(event) => setNewTagName(event.target.value)}
               />
+              <input
+                className="h-10 w-12 rounded-lg border border-white/15 bg-[#0d0f12] p-1"
+                type="color"
+                value={newTagColor}
+                onChange={(event) => setNewTagColor(event.target.value)}
+                aria-label="New tag color"
+              />
+              <div className="flex flex-wrap gap-1">
+                {TAG_COLOR_PRESETS.map((color) => (
+                  <button
+                    key={color}
+                    className={`h-7 w-7 rounded-full border-2 transition ${
+                      newTagColor === color ? 'border-white' : 'border-transparent'
+                    }`}
+                    style={{ backgroundColor: color }}
+                    type="button"
+                    onClick={() => setNewTagColor(color)}
+                    aria-label={`Use ${color}`}
+                  />
+                ))}
+              </div>
               <button
                 className="rounded-lg border border-white/15 px-3 text-sm font-semibold hover:bg-white/5"
                 type="button"
@@ -343,6 +395,11 @@ export function CollectionFormPage(): React.JSX.Element {
             </div>
           </div>
           {error && <p className="text-sm text-[#ffaaa0]">{error}</p>}
+          {hasPendingThumbnail && (
+            <p className="text-sm text-[#ffcf8a]">
+              Approve the compressed thumbnail before creating this collection.
+            </p>
+          )}
           <div className="flex justify-end gap-3 pt-1">
             <button
               className="rounded-lg px-4 py-2.5 font-semibold text-[#a9c8bf] transition hover:bg-white/5 hover:text-[#f4fff8]"
@@ -355,7 +412,12 @@ export function CollectionFormPage(): React.JSX.Element {
             <button
               className="rounded-lg bg-[#00b875] px-5 py-2.5 font-bold text-[#04120d] transition hover:bg-[#00d982] disabled:opacity-50"
               type="submit"
-              disabled={!name.trim() || sources.some((source) => !source.name.trim()) || isCreating}
+              disabled={
+                !name.trim() ||
+                sources.some((source) => !source.name.trim()) ||
+                hasPendingThumbnail ||
+                isCreating
+              }
             >
               {isCreating ? 'Creating...' : 'Create Collection'}
             </button>

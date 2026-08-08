@@ -12,6 +12,7 @@ import {
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import type { Profile } from '../../../../shared/types/profile'
+import { useAppState } from '../../components/useAppState'
 
 const navigation = [
   { label: 'Home', icon: LayoutGrid, path: '/home' },
@@ -34,6 +35,10 @@ function getInitials(name: string): string {
 export function Sidebar({ onAddCollection }: SidebarProps): React.JSX.Element {
   const navigate = useNavigate()
   const location = useLocation()
+  const {
+    appState: { login },
+    clearLoginProfile
+  } = useAppState()
   const [activeProfile, setActiveProfile] = useState<Profile | null>(null)
   const [isCollapsed, setIsCollapsed] = useState(false)
 
@@ -43,26 +48,28 @@ export function Sidebar({ onAddCollection }: SidebarProps): React.JSX.Element {
   }
 
   useEffect(() => {
-    const activeProfileId = sessionStorage.getItem('nexmp.active-profile-id')
-    if (!activeProfileId) return
+    if (!login) {
+      setActiveProfile(null)
+      return
+    }
 
     const loadActiveProfile = (): void => {
       void window.api?.profiles
         .list()
         .then((profiles) =>
-          setActiveProfile(profiles.find((profile) => profile.id === activeProfileId) ?? null)
+          setActiveProfile(profiles.find((profile) => profile.id === login.id) ?? null)
         )
     }
     const handleProfileUpdated = (event: Event): void => {
       const profile = (event as CustomEvent<Profile>).detail
-      if (profile.id === activeProfileId) setActiveProfile(profile)
+      if (profile.id === login.id) setActiveProfile(profile)
     }
 
     loadActiveProfile()
     window.addEventListener('nexmp:profile-updated', handleProfileUpdated)
 
     return () => window.removeEventListener('nexmp:profile-updated', handleProfileUpdated)
-  }, [])
+  }, [login])
 
   return (
     <aside
@@ -142,7 +149,10 @@ export function Sidebar({ onAddCollection }: SidebarProps): React.JSX.Element {
               isCollapsed ? 'justify-center' : 'gap-3'
             }`}
             type="button"
-            onClick={() => navigate('/')}
+            onClick={() => {
+              clearLoginProfile()
+              navigate('/')
+            }}
             title={isCollapsed ? (activeProfile?.name ?? 'Profile') : undefined}
             aria-label="Switch profile"
           >

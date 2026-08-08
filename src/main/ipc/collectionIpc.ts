@@ -1,15 +1,19 @@
-import { dialog, ipcMain } from 'electron'
+import { ipcMain, shell } from 'electron'
 import type {
   AddCollectionSourceInput,
+  ChangeSourcePathInput,
   CreateCollectionInput,
   UpdateCollectionInput,
   UpdateCollectionSourceInput,
+  UpdateSourcePendingMediaInput,
   UpdateSourceMediaOrderInput,
   UpdateMediaFileInput
 } from '../../shared/types/collection'
 import {
   addCollectionSource,
   addSourceMedia,
+  approveSourcePendingMedia,
+  changeSourcePath,
   confirmPendingMedia,
   createCollection,
   createTag,
@@ -17,19 +21,24 @@ import {
   deleteCollectionSource,
   deleteTag,
   deleteMediaFiles,
+  getCollectionSourcePath,
   listCollections,
   listTags,
   listCollectionMedia,
   listSourceMedia,
   previewSourceMedia,
+  refreshSourceMediaAvailability,
+  rejectSourcePendingMedia,
   rescanCollection,
   rescanCollectionSource,
   searchCollections,
   updateCollection,
   updateCollectionSourceMediaOrder,
   updateCollectionSources,
+  updateTag,
   updateMediaFiles
 } from '../services/collectionService'
+import { showModalOpenDialog } from '../dialogs/modalOpenDialog'
 
 const videoExtensions = ['mp4', 'mkv', 'webm', 'mov', 'avi', 'm4v']
 
@@ -44,16 +53,16 @@ export function registerCollectionIpc(): void {
   ipcMain.handle('collections:delete', (_event, collectionId: string) =>
     deleteCollection(collectionId)
   )
-  ipcMain.handle('collections:select-source-folders', async () => {
-    const result = await dialog.showOpenDialog({
+  ipcMain.handle('collections:select-source-folders', async (event) => {
+    const result = await showModalOpenDialog(event.sender, 'collections:select-source-folders', {
       title: 'Select source folders',
       properties: ['openDirectory', 'multiSelections']
     })
 
     return result.canceled ? [] : result.filePaths
   })
-  ipcMain.handle('collections:select-media-files', async () => {
-    const result = await dialog.showOpenDialog({
+  ipcMain.handle('collections:select-media-files', async (event) => {
+    const result = await showModalOpenDialog(event.sender, 'collections:select-media-files', {
       title: 'Select videos',
       properties: ['openFile', 'multiSelections'],
       filters: [
@@ -78,6 +87,12 @@ export function registerCollectionIpc(): void {
     (_event, collectionId: string, sources: UpdateCollectionSourceInput[]) =>
       updateCollectionSources(collectionId, sources)
   )
+  ipcMain.handle('collections:change-source-path', (_event, input: ChangeSourcePathInput) =>
+    changeSourcePath(input)
+  )
+  ipcMain.handle('collections:show-source-in-explorer', (_event, sourceId: string) => {
+    shell.showItemInFolder(getCollectionSourcePath(sourceId))
+  })
   ipcMain.handle(
     'collections:update-source-media-order',
     (_event, input: UpdateSourceMediaOrderInput) => updateCollectionSourceMediaOrder(input)
@@ -88,8 +103,19 @@ export function registerCollectionIpc(): void {
   ipcMain.handle('collections:rescan-source', (_event, sourceId: string) =>
     rescanCollectionSource(sourceId)
   )
+  ipcMain.handle('collections:refresh-source-media-availability', (_event, sourceId: string) =>
+    refreshSourceMediaAvailability(sourceId)
+  )
   ipcMain.handle('collections:confirm-pending-media', (_event, collectionId: string) =>
     confirmPendingMedia(collectionId)
+  )
+  ipcMain.handle(
+    'collections:approve-source-pending-media',
+    (_event, input: UpdateSourcePendingMediaInput) => approveSourcePendingMedia(input)
+  )
+  ipcMain.handle(
+    'collections:reject-source-pending-media',
+    (_event, input: UpdateSourcePendingMediaInput) => rejectSourcePendingMedia(input)
   )
   ipcMain.handle('collections:add-media', (_event, sourceId: string, filePaths: string[]) =>
     addSourceMedia(sourceId, filePaths)
@@ -117,6 +143,9 @@ export function registerCollectionIpc(): void {
   ipcMain.handle(
     'collections:create-tag',
     (_event, profileId: string, name: string, color: string) => createTag(profileId, name, color)
+  )
+  ipcMain.handle('collections:update-tag', (_event, tagId: string, name: string, color: string) =>
+    updateTag(tagId, name, color)
   )
   ipcMain.handle('collections:delete-tag', (_event, tagId: string) => deleteTag(tagId))
 }

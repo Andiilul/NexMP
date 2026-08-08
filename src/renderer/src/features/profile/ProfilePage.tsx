@@ -2,6 +2,7 @@ import { Check, Plus, UserRound } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Profile } from '../../../../shared/types/profile'
+import { useAppState } from '../../components/useAppState'
 
 const avatarColors = ['#00b875', '#3b82f6', '#a855f7', '#f97316', '#ef4444', '#eab308']
 
@@ -16,6 +17,11 @@ function initials(name: string): string {
 
 export function ProfilePage(): React.JSX.Element {
   const navigate = useNavigate()
+  const {
+    appState: { login },
+    setLoginProfile,
+    clearLoginProfile
+  } = useAppState()
   const nameInputRef = useRef<HTMLInputElement>(null)
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [name, setName] = useState('')
@@ -31,7 +37,19 @@ export function ProfilePage(): React.JSX.Element {
         const profileApi = window.api?.profiles
         if (!profileApi) throw new Error('Profile service is unavailable. Please restart NexMP.')
 
-        setProfiles(await profileApi.list())
+        const nextProfiles = await profileApi.list()
+        setProfiles(nextProfiles)
+
+        if (login) {
+          const activeProfile = nextProfiles.find((profile) => profile.id === login.id) ?? null
+          if (activeProfile) {
+            setLoginProfile(activeProfile)
+            navigate('/home', { replace: true })
+            return
+          }
+
+          clearLoginProfile()
+        }
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : 'Unable to load profiles.')
       } finally {
@@ -40,14 +58,14 @@ export function ProfilePage(): React.JSX.Element {
     }
 
     void loadProfiles()
-  }, [])
+  }, [clearLoginProfile, login, navigate, setLoginProfile])
 
   useEffect(() => {
     if (isCreateDialogOpen) nameInputRef.current?.focus()
   }, [isCreateDialogOpen])
 
   const selectProfile = (profile: Profile): void => {
-    sessionStorage.setItem('nexmp.active-profile-id', profile.id)
+    setLoginProfile(profile)
     navigate('/home')
   }
 

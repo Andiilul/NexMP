@@ -1,4 +1,14 @@
-import { ArrowLeft, ArrowDownAZ, BarChart3, Plus, Tags, Trash2 } from 'lucide-react'
+import {
+  ArrowLeft,
+  ArrowDownAZ,
+  BarChart3,
+  Check,
+  Pencil,
+  Plus,
+  Tags,
+  Trash2,
+  X
+} from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { CollectionSearchResult, Tag } from '../../../../shared/types/collection'
@@ -25,6 +35,7 @@ export function TagsPage(): React.JSX.Element {
   const [collections, setCollections] = useState<CollectionSearchResult[]>([])
   const [newTagName, setNewTagName] = useState('')
   const [newTagColor, setNewTagColor] = useState(TAG_COLOR_PRESETS[0])
+  const [editTag, setEditTag] = useState<{ id: string; name: string; color: string } | null>(null)
   const [sortBy, setSortBy] = useState<TagSortBy>('name')
   const [deleteTag, setDeleteTag] = useState<TagWithCount | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -116,6 +127,33 @@ export function TagsPage(): React.JSX.Element {
       await loadTags()
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : 'Unable to create tag.'
+      setError(message)
+      warning(message)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const openEditTag = (tag: Tag): void => {
+    setEditTag({ id: tag.id, name: formatTagName(tag.name), color: tag.color })
+  }
+
+  const cancelEditTag = (): void => {
+    setEditTag(null)
+  }
+
+  const saveEditTag = async (): Promise<void> => {
+    if (!editTag || !editTag.name.trim()) return
+
+    try {
+      setIsSaving(true)
+      setError(null)
+      await window.api?.collections.updateTag(editTag.id, editTag.name, editTag.color)
+      success('Tag updated.')
+      setEditTag(null)
+      await loadTags()
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : 'Unable to update tag.'
       setError(message)
       warning(message)
     } finally {
@@ -257,50 +295,150 @@ export function TagsPage(): React.JSX.Element {
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {sortedTags.map((tag) => (
-              <article
-                key={tag.id}
-                className="flex cursor-pointer flex-col gap-4 rounded-xl border border-white/10 bg-[#171a1f] p-4 transition hover:border-[#00b875]/50 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00d982]"
-                role="button"
-                tabIndex={0}
-                onClick={() => navigate(`/home?tags=${tag.id}`)}
-                onKeyDown={(event) => {
-                  if (event.key !== 'Enter' && event.key !== ' ') return
-                  event.preventDefault()
-                  navigate(`/home?tags=${tag.id}`)
-                }}
-              >
-                <div className="flex w-full items-center gap-3 text-left">
-                  <span
-                    className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-sm font-black text-[#04120d]"
-                    style={{ backgroundColor: tag.color }}
-                  >
-                    #
-                  </span>
-                  <span className="flex min-w-0 flex-1 flex-col gap-1">
-                    <span className="block truncate text-base font-bold">
-                      {formatTagName(tag.name)}
+            {sortedTags.map((tag) => {
+              const isEditingTag = editTag?.id === tag.id
+
+              return (
+                <article
+                  key={tag.id}
+                  className={`flex flex-col gap-4 rounded-xl border border-white/10 bg-[#171a1f] p-4 transition ${
+                    isEditingTag
+                      ? 'border-[#00b875]/50'
+                      : 'cursor-pointer hover:border-[#00b875]/50 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00d982]'
+                  }`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    if (!isEditingTag) navigate(`/home?tags=${tag.id}`)
+                  }}
+                  onKeyDown={(event) => {
+                    if (isEditingTag) return
+                    if (event.key !== 'Enter' && event.key !== ' ') return
+                    event.preventDefault()
+                    navigate(`/home?tags=${tag.id}`)
+                  }}
+                >
+                  <div className="flex w-full items-center gap-3 text-left">
+                    <span
+                      className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-sm font-black text-[#04120d]"
+                      style={{ backgroundColor: tag.color }}
+                    >
+                      #
                     </span>
-                    <span className="block text-sm text-[#a9c8bf]">
-                      {tag.collectionCount} Collection
-                    </span>
-                  </span>
-                </div>
-                <div className="flex items-center justify-end gap-3 border-t border-white/[0.07] pt-3">
-                  <button
-                    className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-[#ffaaa0] transition hover:bg-[#3e1c1f]/70"
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      setDeleteTag(tag)
-                    }}
-                  >
-                    <Trash2 size={15} />
-                    Delete
-                  </button>
-                </div>
-              </article>
-            ))}
+                    {isEditingTag ? (
+                      <div
+                        className="flex min-w-0 flex-1 flex-col gap-3"
+                        data-collection-card-action="true"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <input
+                          className="w-full rounded-lg border border-white/15 bg-[#0d0f12] px-3 py-2 text-sm font-bold text-[#f4fff8] outline-none focus:border-[#00b875]"
+                          value={editTag.name}
+                          maxLength={40}
+                          onChange={(event) =>
+                            setEditTag((current) =>
+                              current ? { ...current, name: event.target.value } : current
+                            )
+                          }
+                          autoFocus
+                        />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input
+                            className="h-9 w-12 rounded-lg border border-white/15 bg-[#0d0f12] p-1"
+                            type="color"
+                            value={editTag.color}
+                            onChange={(event) =>
+                              setEditTag((current) =>
+                                current ? { ...current, color: event.target.value } : current
+                              )
+                            }
+                            aria-label={`Color for ${tag.name}`}
+                          />
+                          {TAG_COLOR_PRESETS.map((color) => (
+                            <button
+                              key={color}
+                              className={`h-7 w-7 rounded-full border-2 transition ${
+                                editTag.color === color ? 'border-white' : 'border-transparent'
+                              }`}
+                              style={{ backgroundColor: color }}
+                              type="button"
+                              onClick={() =>
+                                setEditTag((current) => (current ? { ...current, color } : current))
+                              }
+                              aria-label={`Use ${color}`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="flex min-w-0 flex-1 flex-col gap-1">
+                        <span className="block truncate text-base font-bold">
+                          {formatTagName(tag.name)}
+                        </span>
+                        <span className="block text-sm text-[#a9c8bf]">
+                          {tag.collectionCount} Collection
+                        </span>
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-end gap-3 border-t border-white/[0.07] pt-3">
+                    {isEditingTag ? (
+                      <>
+                        <button
+                          className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-[#a9c8bf] transition hover:bg-white/5 hover:text-[#f4fff8]"
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            cancelEditTag()
+                          }}
+                          disabled={isSaving}
+                        >
+                          <X size={15} />
+                          Cancel
+                        </button>
+                        <button
+                          className="inline-flex items-center gap-2 rounded-lg bg-[#00b875] px-3 py-2 text-xs font-bold text-[#04120d] transition hover:bg-[#00d982] disabled:opacity-60"
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            void saveEditTag()
+                          }}
+                          disabled={!editTag.name.trim() || isSaving}
+                        >
+                          <Check size={15} />
+                          Save
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-[#a9c8bf] transition hover:bg-white/5 hover:text-[#f4fff8]"
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            openEditTag(tag)
+                          }}
+                        >
+                          <Pencil size={15} />
+                          Edit
+                        </button>
+                        <button
+                          className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-[#ffaaa0] transition hover:bg-[#3e1c1f]/70"
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            setDeleteTag(tag)
+                          }}
+                        >
+                          <Trash2 size={15} />
+                          Delete
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </article>
+              )
+            })}
           </div>
         </section>
       )}

@@ -20,6 +20,7 @@ import { CollectionCard } from '../collections/CollectionCard'
 import type { CollectionCardData } from '../collections/types'
 import { createPlayablePlaylist, type PlayerRouteState } from '../collections/mediaPlayback'
 import { useAppState } from '../../components/useAppState'
+import type { HomeSortBy } from '../../components/appStateContext'
 import { useToast } from '../../components/useToast'
 import { formatTagName } from '../tags/tagDisplay'
 
@@ -28,17 +29,14 @@ type HomeCollection = CollectionSearchResult & {
   videoCount: number
   mediaForCollection: MediaFile[]
 }
-type SortBy = 'date' | 'name' | 'rating'
 type TagMatchMode = 'all' | 'any'
 
 const HOME_COLLECTION_TILE_ZOOM_LEVELS = [
-  { label: 'Compact', width: 176, skeletonHeight: 244 },
-  { label: 'Normal', width: 208, skeletonHeight: 264 },
-  { label: 'Large', width: 240, skeletonHeight: 286 },
-  { label: 'Extra', width: 280, skeletonHeight: 314 }
+  { label: 'Compact', minWidth: 220, maxWidth: 280, skeletonHeight: 292 },
+  { label: 'Normal', minWidth: 260, maxWidth: 340, skeletonHeight: 328 },
+  { label: 'Large', minWidth: 320, maxWidth: 420, skeletonHeight: 366 },
+  { label: 'Extra', minWidth: 380, maxWidth: 500, skeletonHeight: 414 }
 ] as const
-
-const DEFAULT_HOME_COLLECTION_TILE_ZOOM_INDEX = 1
 
 export function HomePage(): React.JSX.Element {
   const navigate = useNavigate()
@@ -56,13 +54,13 @@ export function HomePage(): React.JSX.Element {
   const [deleteCollection, setDeleteCollection] = useState<HomeCollection | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [isSavingAction, setIsSavingAction] = useState(false)
-  const [sortBy, setSortBy] = useState<SortBy>('date')
   const [isPinnedOpen, setIsPinnedOpen] = useState(true)
   const {
-    appState: { pinOnTop },
-    togglePinOnTop
+    appState: { pinOnTop, homeCollectionTileSizeIndex, homeSortBy },
+    togglePinOnTop,
+    setHomeCollectionTileSizeIndex,
+    setHomeSortBy
   } = useAppState()
-  const [tileZoomIndex, setTileZoomIndex] = useState(DEFAULT_HOME_COLLECTION_TILE_ZOOM_INDEX)
   const [playPickerCollection, setPlayPickerCollection] = useState<HomeCollection | null>(null)
   const [playPickerMedia, setPlayPickerMedia] = useState<MediaFile[]>([])
   const [selectedPlayPickerMediaIds, setSelectedPlayPickerMediaIds] = useState<string[]>([])
@@ -286,13 +284,13 @@ export function HomePage(): React.JSX.Element {
     firstCollection: HomeCollection,
     secondCollection: HomeCollection
   ): number => {
-    if (sortBy === 'name') {
+    if (homeSortBy === 'name') {
       return firstCollection.name.localeCompare(secondCollection.name, undefined, {
         numeric: true,
         sensitivity: 'base'
       })
     }
-    if (sortBy === 'rating') {
+    if (homeSortBy === 'rating') {
       return (
         secondCollection.rating - firstCollection.rating ||
         firstCollection.name.localeCompare(secondCollection.name, undefined, {
@@ -349,15 +347,22 @@ export function HomePage(): React.JSX.Element {
   const visibleCollections = pinOnTop
     ? unpinnedCollections
     : [...pinnedCollections, ...unpinnedCollections]
+  const tileZoomIndex = Math.min(
+    Math.max(homeCollectionTileSizeIndex, 0),
+    HOME_COLLECTION_TILE_ZOOM_LEVELS.length - 1
+  )
   const tileZoom = HOME_COLLECTION_TILE_ZOOM_LEVELS[tileZoomIndex]
+  const collectionGridStyle = {
+    gridTemplateColumns: `repeat(auto-fit, minmax(min(100%, ${tileZoom.minWidth}px), ${tileZoom.maxWidth}px))`
+  }
 
   const zoomOutCollectionTiles = (): void => {
-    setTileZoomIndex((current) => Math.max(0, current - 1))
+    setHomeCollectionTileSizeIndex(Math.max(0, tileZoomIndex - 1))
   }
 
   const zoomInCollectionTiles = (): void => {
-    setTileZoomIndex((current) =>
-      Math.min(HOME_COLLECTION_TILE_ZOOM_LEVELS.length - 1, current + 1)
+    setHomeCollectionTileSizeIndex(
+      Math.min(HOME_COLLECTION_TILE_ZOOM_LEVELS.length - 1, tileZoomIndex + 1)
     )
   }
 
@@ -395,8 +400,7 @@ export function HomePage(): React.JSX.Element {
   const renderCollectionTile = (collection: HomeCollection): React.JSX.Element => (
     <div
       key={collection.id}
-      className="rounded-2xl border border-transparent p-2 transition hover:bg-white/[0.04]"
-      style={{ width: tileZoom.width }}
+      className="min-w-0 border border-transparent"
       onClick={(event) => {
         if (isCollectionCardActionTarget(event.target)) return
 
@@ -412,6 +416,7 @@ export function HomePage(): React.JSX.Element {
           videoCount: collection.videoCount,
           rating: collection.rating,
           isPinned: collection.isPinned,
+          tags: collection.tags,
           updatedLabel: `Updated ${new Date(collection.updatedAt).toLocaleDateString()}`
         }}
         onOpen={(selectedCollection) => openCollection(selectedCollection.id)}
@@ -423,16 +428,13 @@ export function HomePage(): React.JSX.Element {
             isPinned: !selectedCollection.isPinned
           })
         }
-        onRate={(selectedCollection, rating) =>
-          void updateCollectionMeta(selectedCollection, { rating })
-        }
         onDelete={openDeleteModal}
       />
     </div>
   )
 
   return (
-    <div className="flex w-full max-w-6xl flex-col gap-8">
+    <div className="flex min-h-full w-full flex-col gap-8">
       <div className="flex items-end justify-between gap-6">
         <div className="flex min-w-0 flex-col gap-2">
           <p className="text-sm font-semibold text-[#00d982]">YOUR LIBRARY</p>
@@ -548,12 +550,16 @@ export function HomePage(): React.JSX.Element {
       </section>
 
       {isLoading && (
-        <section className="flex flex-wrap items-start" aria-label="Loading collections">
+        <section
+          className="grid gap-3"
+          style={collectionGridStyle}
+          aria-label="Loading collections"
+        >
           {[1, 2, 3].map((item) => (
             <div
               key={item}
               className="h-64 animate-pulse rounded-xl border border-white/[0.08] bg-white/[0.03]"
-              style={{ width: tileZoom.width, height: tileZoom.skeletonHeight }}
+              style={{ height: tileZoom.skeletonHeight }}
             />
           ))}
         </section>
@@ -643,19 +649,19 @@ export function HomePage(): React.JSX.Element {
               </button>
               <span className="text-xs font-semibold text-[#a9c8bf]">Sort by</span>
               {[
-                { value: 'date' as const, label: 'Date', icon: CalendarDays },
-                { value: 'name' as const, label: 'Name', icon: Text },
-                { value: 'rating' as const, label: 'Rating', icon: Star }
+                { value: 'date' as HomeSortBy, label: 'Date', icon: CalendarDays },
+                { value: 'name' as HomeSortBy, label: 'Name', icon: Text },
+                { value: 'rating' as HomeSortBy, label: 'Rating', icon: Star }
               ].map(({ value, label, icon: Icon }) => (
                 <button
                   key={value}
                   className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-bold transition ${
-                    sortBy === value
+                    homeSortBy === value
                       ? 'border-[#00b875] bg-[#00b875]/15 text-[#00d982]'
                       : 'border-white/10 text-[#a9c8bf] hover:bg-white/5 hover:text-[#f4fff8]'
                   }`}
                   type="button"
-                  onClick={() => setSortBy(value)}
+                  onClick={() => setHomeSortBy(value)}
                 >
                   <Icon size={16} />
                   {label}
@@ -680,7 +686,7 @@ export function HomePage(): React.JSX.Element {
                 />
               </button>
               {isPinnedOpen && (
-                <div className="flex flex-wrap items-start">
+                <div className="grid gap-3" style={collectionGridStyle}>
                   {pinnedCollections.map(renderCollectionTile)}
                 </div>
               )}
@@ -691,7 +697,7 @@ export function HomePage(): React.JSX.Element {
               {pinOnTop && pinnedCollections.length > 0 && (
                 <h3 className="text-sm font-bold text-[#a9c8bf]">All collections</h3>
               )}
-              <div className="flex flex-wrap items-start">
+              <div className="grid gap-3" style={collectionGridStyle}>
                 {visibleCollections.map(renderCollectionTile)}
               </div>
             </div>

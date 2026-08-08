@@ -118,6 +118,32 @@ export const playbackProgress = sqliteTable(
   ]
 )
 
+export const playbackSessions = sqliteTable(
+  'playback_sessions',
+  {
+    id: text('id').primaryKey(),
+    profileId: text('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    playlistKey: text('playlist_key').notNull(),
+    playlistJson: text('playlist_json').notNull(),
+    collectionName: text('collection_name'),
+    activeIndex: integer('active_index').notNull().default(0),
+    activeMediaFileId: text('active_media_file_id').references(() => mediaFiles.id, {
+      onDelete: 'set null'
+    }),
+    positionSeconds: integer('position_seconds').notNull().default(0),
+    durationSeconds: integer('duration_seconds'),
+    completed: integer('completed', { mode: 'boolean' }).notNull().default(false),
+    lastPlayedAt: text('last_played_at'),
+    ...timestamps
+  },
+  (table) => [
+    uniqueIndex('playback_sessions_profile_playlist_unique').on(table.profileId, table.playlistKey),
+    index('playback_sessions_profile_last_played_index').on(table.profileId, table.lastPlayedAt)
+  ]
+)
+
 export const tags = sqliteTable(
   'tags',
   {

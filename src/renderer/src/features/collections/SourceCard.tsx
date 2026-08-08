@@ -67,8 +67,10 @@ export function SourceCard({
         <p className="truncate text-sm text-[#a9c8bf]">{source.sourcePath}</p>
         <p className="text-xs text-[#a9c8bf]/70">
           {source.isMissing
-            ? 'Folder unavailable'
-            : `${videoCount} ${videoCount === 1 ? 'video' : 'videos'}`}
+            ? `Folder unavailable - ${source.isDynamic ? 'dynamic' : 'manual'}`
+            : `${videoCount} ${videoCount === 1 ? 'video' : 'videos'} - ${
+                source.isDynamic ? 'dynamic' : 'manual'
+              }`}
         </p>
       </div>
       {onRename && (

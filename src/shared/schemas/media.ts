@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 export const VideoFileSchema = z.object({
+  mediaId: z.string().optional(),
   name: z.string().min(1),
   extension: z.string(),
   path: z.string().min(1),

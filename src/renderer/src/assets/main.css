@@ -47,6 +47,15 @@
     @apply accent-[#e9edf9];
   }
 
+  video::cue {
+    color: #ffffff;
+    background: transparent;
+    text-shadow:
+      0 2px 3px rgba(0, 0, 0, 0.95),
+      0 0 2px rgba(0, 0, 0, 0.95),
+      0 0 5px rgba(0, 0, 0, 0.85);
+  }
+
   * {
     scrollbar-color: rgba(255, 255, 255, 0.34) transparent;
     scrollbar-width: thin;

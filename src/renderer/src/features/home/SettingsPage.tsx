@@ -2,6 +2,8 @@ import { Check, Settings, UserRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Profile } from '../../../../shared/types/profile'
+import type { PlayerEngine } from '../../../../shared/types/media'
+import { useAppState } from '../../components/useAppState'
 import { useToast } from '../../components/useToast'
 
 function getInitials(name: string): string {
@@ -16,6 +18,7 @@ function getInitials(name: string): string {
 export function SettingsPage(): React.JSX.Element {
   const navigate = useNavigate()
   const { success, warning } = useToast()
+  const { appState, setPlayerEngine, setLoginProfile } = useAppState()
   const [activeProfile, setActiveProfile] = useState<Profile | null>(null)
   const [profileName, setProfileName] = useState('')
   const [isLoading, setIsLoading] = useState(true)
@@ -62,6 +65,9 @@ export function SettingsPage(): React.JSX.Element {
 
       setActiveProfile(profile)
       setProfileName(profile.name)
+      if (appState.login?.id === profile.id) {
+        setLoginProfile(profile)
+      }
       window.dispatchEvent(new CustomEvent('nexmp:profile-updated', { detail: profile }))
       success('Profile updated.')
     } catch (reason) {
@@ -74,6 +80,25 @@ export function SettingsPage(): React.JSX.Element {
   }
 
   const hasProfileNameChanged = profileName.trim() !== (activeProfile?.name ?? '')
+  const engineOptions: Array<{
+    value: PlayerEngine
+    title: string
+    badge?: string
+    description: string
+  }> = [
+    {
+      value: 'html',
+      title: 'HTML engine',
+      badge: 'Default',
+      description: 'Main NexMP player for every format. Uses clean text subtitles for MKV softsubs.'
+    },
+    {
+      value: 'mpv',
+      title: 'MPV engine',
+      badge: 'Beta',
+      description: 'Experimental native mpv renderer inside NexMP. Use only when HTML playback needs a fallback.'
+    }
+  ]
 
   return (
     <div className="flex w-full max-w-3xl flex-col gap-10">
@@ -140,6 +165,53 @@ export function SettingsPage(): React.JSX.Element {
             </div>
           </div>
         )}
+      </section>
+
+      <section className="flex flex-col gap-5 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-7">
+        <div className="flex items-center gap-3">
+          <span className="grid h-11 w-11 place-items-center rounded-lg bg-[#00b875]/10 text-[#00d982]">
+            <Settings size={22} />
+          </span>
+          <div className="flex flex-col gap-1">
+            <h2 className="font-bold">Player engine</h2>
+            <p className="text-sm text-[#a9c8bf]">Choose how NexMP renders video playback.</p>
+          </div>
+        </div>
+
+        <div className="grid gap-3">
+          {engineOptions.map((option) => {
+            const isSelected = appState.playerEngine === option.value
+
+            return (
+              <button
+                key={option.value}
+                className={`flex items-start justify-between gap-4 rounded-xl border p-4 text-left transition ${
+                  isSelected
+                    ? 'border-[#00b875]/70 bg-[#00b875]/10'
+                    : 'border-white/10 bg-[#0d0f12]/70 hover:border-white/20 hover:bg-white/[0.05]'
+                }`}
+                type="button"
+                onClick={() => {
+                  setPlayerEngine(option.value)
+                  success(`Player engine set to ${option.title}.`)
+                }}
+              >
+                <span className="flex flex-col gap-1">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="font-bold text-[#f4fff8]">{option.title}</span>
+                    {option.badge && (
+                      <span className="rounded-md border border-[#00d982]/30 bg-[#00b875]/10 px-2 py-0.5 text-[11px] leading-4 font-bold uppercase tracking-wide text-[#00d982]">
+                        {option.badge}
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-sm text-[#a9c8bf]">{option.description}</span>
+                </span>
+                {isSelected && <Check size={20} className="mt-0.5 shrink-0 text-[#00d982]" />}
+              </button>
+            )
+          })}
+        </div>
       </section>
     </div>
   )

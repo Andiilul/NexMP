@@ -1,11 +1,15 @@
 import { randomUUID } from 'node:crypto'
-import { existsSync, readdirSync, statSync } from 'node:fs'
-import { basename, extname, join } from 'node:path'
+import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { basename, extname, isAbsolute, join, relative, resolve } from 'node:path'
 import { asc, eq } from 'drizzle-orm'
+import { app } from 'electron'
 import type {
   AddCollectionSourceInput,
+  ChangeSourcePathInput,
+  Collection,
   CollectionSearchResult,
   CollectionSourceInput,
+  CollectionThumbnailImageInput,
   CollectionWithSources,
   CreateCollectionInput,
   MediaFile,
@@ -14,6 +18,7 @@ import type {
   Tag,
   UpdateCollectionInput,
   UpdateCollectionSourceInput,
+  UpdateSourcePendingMediaInput,
   UpdateSourceMediaOrderInput,
   UpdateMediaFileInput
 } from '../../shared/types/collection'
@@ -30,6 +35,7 @@ import { createMediaProtocolUrl } from '../media/mediaProtocol'
 
 const supportedMediaExtensions = new Set(['.mp4', '.mkv', '.webm', '.mov', '.avi', '.m4v'])
 const sourceMediaOrders = new Set<SourceMediaOrder>(['custom', 'name', 'date'])
+const maxCollectionThumbnailSizeBytes = 1024 * 1024
 
 function normalizeName(name: string): string {
   return name.trim().replace(/\s+/g, ' ')
@@ -39,6 +45,58 @@ function normalizeSourceMediaOrder(mediaOrder: string): SourceMediaOrder {
   return sourceMediaOrders.has(mediaOrder as SourceMediaOrder)
     ? (mediaOrder as SourceMediaOrder)
     : 'name'
+}
+
+function toPublicCollection(collection: Collection): Collection {
+  return {
+    ...collection,
+    coverPath: collection.coverPath ? createMediaProtocolUrl(collection.coverPath) : null
+  }
+}
+
+function getCollectionThumbnailDirectory(): string {
+  return join(app.getPath('userData'), 'thumbnails', 'collections')
+}
+
+function getCollectionThumbnailPath(collectionId: string): string {
+  return join(getCollectionThumbnailDirectory(), `${collectionId}.webp`)
+}
+
+function parseThumbnailDataUrl(input: CollectionThumbnailImageInput): Buffer {
+  const match = input.dataUrl.match(/^data:image\/webp;base64,([a-zA-Z0-9+/=]+)$/)
+  if (!match) throw new Error('Thumbnail must be a compressed WebP image.')
+
+  const buffer = Buffer.from(match[1], 'base64')
+  if (buffer.length > maxCollectionThumbnailSizeBytes) {
+    throw new Error('Compressed thumbnail must be 1 MB or smaller.')
+  }
+
+  return buffer
+}
+
+function saveCollectionThumbnail(
+  collectionId: string,
+  thumbnail: CollectionThumbnailImageInput
+): string {
+  const buffer = parseThumbnailDataUrl(thumbnail)
+  const thumbnailDirectory = getCollectionThumbnailDirectory()
+  const thumbnailPath = getCollectionThumbnailPath(collectionId)
+
+  mkdirSync(thumbnailDirectory, { recursive: true })
+  writeFileSync(thumbnailPath, buffer)
+
+  return thumbnailPath
+}
+
+function deleteCollectionThumbnail(collectionId: string): void {
+  const thumbnailPath = getCollectionThumbnailPath(collectionId)
+  if (!existsSync(thumbnailPath)) return
+
+  try {
+    unlinkSync(thumbnailPath)
+  } catch {
+    // Ignore stale thumbnail cleanup failures; the database update is the important part.
+  }
 }
 
 function compareMediaName(
@@ -68,7 +126,7 @@ function getCollectionWithSources(collectionId: string): CollectionWithSources {
   if (!collection) throw new Error('Collection not found.')
 
   return {
-    ...collection,
+    ...toPublicCollection(collection),
     sources: database
       .select()
       .from(collectionSources)
@@ -87,6 +145,91 @@ function getSourceCollectionId(sourceId: string): string {
   if (!source) throw new Error('Source not found.')
 
   return source.collectionId
+}
+
+export function getCollectionSourcePath(sourceId: string): string {
+  const source = getDatabase()
+    .select({ sourcePath: collectionSources.sourcePath })
+    .from(collectionSources)
+    .where(eq(collectionSources.id, sourceId))
+    .get()
+  if (!source) throw new Error('Source not found.')
+
+  return source.sourcePath
+}
+
+function isPathInsideDirectory(filePath: string, directoryPath: string): boolean {
+  const relativePath = relative(resolve(directoryPath), resolve(filePath))
+
+  return Boolean(relativePath) && !relativePath.startsWith('..') && !isAbsolute(relativePath)
+}
+
+function reorderSourceMedia(sourceId: string): void {
+  const database = getDatabase()
+  const remainingMedia = database
+    .select()
+    .from(mediaFiles)
+    .where(eq(mediaFiles.collectionSourceId, sourceId))
+    .orderBy(asc(mediaFiles.sortOrder))
+    .all()
+
+  remainingMedia.forEach((media, sortOrder) => {
+    database
+      .update(mediaFiles)
+      .set({ sortOrder, updatedAt: new Date().toISOString() })
+      .where(eq(mediaFiles.id, media.id))
+      .run()
+  })
+}
+
+function refreshKnownSourceMedia(sourceId: string): void {
+  const database = getDatabase()
+  const source = database
+    .select()
+    .from(collectionSources)
+    .where(eq(collectionSources.id, sourceId))
+    .get()
+  if (!source) throw new Error('Source not found.')
+
+  const knownMedia = database
+    .select()
+    .from(mediaFiles)
+    .where(eq(mediaFiles.collectionSourceId, sourceId))
+    .all()
+  const scannedAt = new Date().toISOString()
+  const sourcePath = source.sourcePath
+  const sourceExists = existsSync(sourcePath)
+  const availablePaths =
+    source.isDynamic && sourceExists ? new Set(findMediaFiles(sourcePath)) : null
+
+  database
+    .update(collectionSources)
+    .set({
+      isMissing: !sourceExists,
+      lastScannedAt: scannedAt,
+      updatedAt: scannedAt
+    })
+    .where(eq(collectionSources.id, sourceId))
+    .run()
+
+  for (const media of knownMedia) {
+    const fileExists = availablePaths
+      ? availablePaths.has(media.filePath)
+      : existsSync(media.filePath)
+
+    if (!fileExists && media.isPending) {
+      database.delete(mediaFiles).where(eq(mediaFiles.id, media.id)).run()
+      continue
+    }
+
+    database
+      .update(mediaFiles)
+      .set({ isMissing: !fileExists, updatedAt: scannedAt })
+      .where(eq(mediaFiles.id, media.id))
+      .run()
+  }
+
+  reorderSourceMedia(sourceId)
 }
 
 function normalizeSourceInputs(input: CreateCollectionInput): CollectionSourceInput[] {
@@ -119,7 +262,7 @@ export function listCollections(profileId: string): CollectionWithSources[] {
     .all()
 
   return profileCollections.map((collection) => ({
-    ...collection,
+    ...toPublicCollection(collection),
     sources: database
       .select()
       .from(collectionSources)
@@ -150,7 +293,11 @@ export function createCollection(input: CreateCollectionInput): CollectionWithSo
   const createdSources: Array<{ id: string; input: CollectionSourceInput }> = []
 
   database.transaction(() => {
-    database.insert(collections).values({ id, profileId: input.profileId, name, sortOrder }).run()
+    const coverPath = input.coverImage ? saveCollectionThumbnail(id, input.coverImage) : null
+    database
+      .insert(collections)
+      .values({ id, profileId: input.profileId, name, sortOrder, coverPath })
+      .run()
     sourceInputs.forEach((sourceInput, index) => {
       const sourceId = randomUUID()
       createdSources.push({ id: sourceId, input: sourceInput })
@@ -206,7 +353,8 @@ export function previewSourceMedia(sourcePath: string): SourceMediaPreview[] {
       filePath,
       filename,
       extension: extname(filename).slice(1).toLocaleLowerCase(),
-      sizeBytes: stats.size
+      sizeBytes: stats.size,
+      url: createMediaProtocolUrl(filePath)
     }
   })
 }
@@ -271,7 +419,8 @@ function importInitialSourceMedia(sourceId: string, sourceInput: CollectionSourc
   if (!source) throw new Error('Source not found.')
 
   const scannedAt = new Date().toISOString()
-  if (!existsSync(source.sourcePath)) {
+  const sourcePath = source.sourcePath
+  if (!existsSync(sourcePath)) {
     database
       .update(collectionSources)
       .set({ isMissing: true, lastScannedAt: scannedAt, updatedAt: scannedAt })
@@ -282,7 +431,7 @@ function importInitialSourceMedia(sourceId: string, sourceInput: CollectionSourc
 
   const selectedPaths = sourceInput.isDynamic
     ? findMediaFiles(source.sourcePath)
-    : (sourceInput.includedFilePaths ?? findMediaFiles(source.sourcePath))
+    : (sourceInput.includedFilePaths ?? findMediaFiles(sourcePath))
 
   insertMediaFiles(sourceId, selectedPaths, false)
   database
@@ -297,54 +446,21 @@ export type NewMediaCandidate = SourceMediaPreview
 
 export function scanCollectionSource(sourceId: string): NewMediaCandidate[] {
   const database = getDatabase()
+  refreshKnownSourceMedia(sourceId)
+
   const source = database
     .select()
     .from(collectionSources)
     .where(eq(collectionSources.id, sourceId))
     .get()
   if (!source) throw new Error('Source not found.')
+  if (!source.isDynamic || !existsSync(source.sourcePath)) return []
 
   const knownMedia = database
     .select()
     .from(mediaFiles)
     .where(eq(mediaFiles.collectionSourceId, sourceId))
     .all()
-  const scannedAt = new Date().toISOString()
-
-  if (!existsSync(source.sourcePath)) {
-    database
-      .update(collectionSources)
-      .set({ isMissing: true, lastScannedAt: scannedAt, updatedAt: scannedAt })
-      .where(eq(collectionSources.id, sourceId))
-      .run()
-    for (const media of knownMedia) {
-      database
-        .update(mediaFiles)
-        .set({ isMissing: true, updatedAt: scannedAt })
-        .where(eq(mediaFiles.id, media.id))
-        .run()
-    }
-    return []
-  }
-
-  const availablePaths = new Set(findMediaFiles(source.sourcePath))
-  database
-    .update(collectionSources)
-    .set({ isMissing: false, lastScannedAt: scannedAt, updatedAt: scannedAt })
-    .where(eq(collectionSources.id, sourceId))
-    .run()
-
-  for (const media of knownMedia) {
-    const isMissing = !availablePaths.has(media.filePath)
-    database
-      .update(mediaFiles)
-      .set({ isMissing, updatedAt: scannedAt })
-      .where(eq(mediaFiles.id, media.id))
-      .run()
-  }
-
-  if (!source.isDynamic) return []
-
   const knownPaths = new Set(knownMedia.map((media) => media.filePath))
   const candidates = previewSourceMedia(source.sourcePath).filter(
     (candidate) => !knownPaths.has(candidate.filePath)
@@ -447,6 +563,13 @@ export function listSourceMedia(sourceId: string): MediaFile[] {
   return listCollectionMedia(collectionId).filter((media) => media.collectionSourceId === sourceId)
 }
 
+export function refreshSourceMediaAvailability(sourceId: string): MediaFile[] {
+  const collectionId = getSourceCollectionId(sourceId)
+  refreshKnownSourceMedia(sourceId)
+
+  return listCollectionMedia(collectionId)
+}
+
 export function rescanCollection(collectionId: string): MediaFile[] {
   const database = getDatabase()
   const sources = database
@@ -487,6 +610,52 @@ export function confirmPendingMedia(collectionId: string): MediaFile[] {
       .run()
   }
 
+  return listCollectionMedia(collectionId)
+}
+
+export function approveSourcePendingMedia(input: UpdateSourcePendingMediaInput): MediaFile[] {
+  const collectionId = getSourceCollectionId(input.sourceId)
+  refreshKnownSourceMedia(input.sourceId)
+
+  const pendingMedia = listSourceMedia(input.sourceId).filter(
+    (media) => media.isPending && !media.isMissing
+  )
+  const pendingIds = new Set(pendingMedia.map((media) => media.id))
+  const targetIds =
+    input.mediaIds === undefined
+      ? [...pendingIds]
+      : [...new Set(input.mediaIds)].filter((mediaId) => pendingIds.has(mediaId))
+
+  const database = getDatabase()
+  for (const mediaId of targetIds) {
+    database
+      .update(mediaFiles)
+      .set({ isPending: false, isMissing: false, updatedAt: new Date().toISOString() })
+      .where(eq(mediaFiles.id, mediaId))
+      .run()
+  }
+
+  reorderSourceMedia(input.sourceId)
+  return listCollectionMedia(collectionId)
+}
+
+export function rejectSourcePendingMedia(input: UpdateSourcePendingMediaInput): MediaFile[] {
+  const collectionId = getSourceCollectionId(input.sourceId)
+  refreshKnownSourceMedia(input.sourceId)
+
+  const pendingMedia = listSourceMedia(input.sourceId).filter((media) => media.isPending)
+  const pendingIds = new Set(pendingMedia.map((media) => media.id))
+  const targetIds =
+    input.mediaIds === undefined
+      ? [...pendingIds]
+      : [...new Set(input.mediaIds)].filter((mediaId) => pendingIds.has(mediaId))
+
+  const database = getDatabase()
+  for (const mediaId of targetIds) {
+    database.delete(mediaFiles).where(eq(mediaFiles.id, mediaId)).run()
+  }
+
+  reorderSourceMedia(input.sourceId)
   return listCollectionMedia(collectionId)
 }
 
@@ -550,6 +719,24 @@ export function deleteCollectionSource(sourceId: string): CollectionWithSources 
 
 export function addSourceMedia(sourceId: string, filePaths: string[]): MediaFile[] {
   const collectionId = getSourceCollectionId(sourceId)
+  const source = getDatabase()
+    .select({ sourcePath: collectionSources.sourcePath, isDynamic: collectionSources.isDynamic })
+    .from(collectionSources)
+    .where(eq(collectionSources.id, sourceId))
+    .get()
+  if (!source) throw new Error('Source not found.')
+
+  if (source.isDynamic) {
+    const outsideFiles = filePaths.filter(
+      (filePath) => !isPathInsideDirectory(filePath, source.sourcePath)
+    )
+    if (outsideFiles.length > 0) {
+      throw new Error(
+        'Dynamic sources only accept videos inside their folder. Turn off Dynamic to add videos from other folders.'
+      )
+    }
+  }
+
   insertMediaFiles(sourceId, filePaths, false)
 
   return listCollectionMedia(collectionId)
@@ -585,6 +772,22 @@ export function updateCollection(input: UpdateCollectionInput): CollectionWithSo
       .run()
   }
 
+  if (input.coverImage) {
+    const coverPath = saveCollectionThumbnail(input.id, input.coverImage)
+    database
+      .update(collections)
+      .set({ coverPath, updatedAt })
+      .where(eq(collections.id, input.id))
+      .run()
+  } else if (input.removeCover) {
+    deleteCollectionThumbnail(input.id)
+    database
+      .update(collections)
+      .set({ coverPath: null, updatedAt })
+      .where(eq(collections.id, input.id))
+      .run()
+  }
+
   if (input.tagIds) {
     const nextTagIds = [...new Set(input.tagIds)]
     database.transaction(() => {
@@ -616,18 +819,110 @@ export function updateCollectionSources(
     if (!sourceIds.has(sourceInput.id)) throw new Error('Source not found in this collection.')
     const name = normalizeName(sourceInput.name)
     if (!name) throw new Error('Source name is required.')
+
+    const currentSource = database
+      .select()
+      .from(collectionSources)
+      .where(eq(collectionSources.id, sourceInput.id))
+      .get()
+    if (!currentSource) throw new Error('Source not found in this collection.')
+
+    const nextIsDynamic = sourceInput.isDynamic ?? currentSource.isDynamic
+    const requestedSourcePath =
+      sourceInput.sourcePath === undefined ? currentSource.sourcePath : sourceInput.sourcePath
+    const nextSourcePath = requestedSourcePath?.trim() || currentSource.sourcePath
+
+    if (nextIsDynamic) {
+      if (!existsSync(nextSourcePath)) throw new Error('Dynamic source folder does not exist.')
+    }
+
+    if (currentSource.isDynamic && !nextIsDynamic) {
+      const pendingMedia = database
+        .select()
+        .from(mediaFiles)
+        .where(eq(mediaFiles.collectionSourceId, sourceInput.id))
+        .all()
+        .filter((media) => media.isPending)
+
+      if (pendingMedia.length > 0 && !sourceInput.pendingAction) {
+        throw new Error('Choose whether to ignore or approve pending items first.')
+      }
+
+      if (sourceInput.pendingAction === 'approve') {
+        for (const media of pendingMedia) {
+          database
+            .update(mediaFiles)
+            .set({ isPending: false, isMissing: false, updatedAt: new Date().toISOString() })
+            .where(eq(mediaFiles.id, media.id))
+            .run()
+        }
+      } else {
+        for (const media of pendingMedia) {
+          database.delete(mediaFiles).where(eq(mediaFiles.id, media.id)).run()
+        }
+      }
+    }
+
+    if (!currentSource.isDynamic && nextIsDynamic) {
+      throw new Error('Manual sources cannot be changed back to Dynamic.')
+    }
+
+    const shouldScanDynamic =
+      nextIsDynamic &&
+      (sourceInput.isDynamic !== undefined || sourceInput.sourcePath !== undefined) &&
+      Boolean(nextSourcePath)
+
     database
       .update(collectionSources)
       .set({
         name,
         sortOrder: sourceInput.sortOrder,
+        isDynamic: nextIsDynamic,
+        sourcePath: nextSourcePath,
+        isMissing: !existsSync(nextSourcePath),
         updatedAt: new Date().toISOString()
       })
       .where(eq(collectionSources.id, sourceInput.id))
       .run()
+
+    if (shouldScanDynamic) {
+      scanCollectionSource(sourceInput.id)
+    } else {
+      refreshKnownSourceMedia(sourceInput.id)
+    }
   }
 
   return getCollectionWithSources(collectionId)
+}
+
+export function changeSourcePath(input: ChangeSourcePathInput): MediaFile[] {
+  const sourcePath = input.sourcePath.trim()
+  if (!sourcePath) throw new Error('Source folder is required.')
+  if (!existsSync(sourcePath)) throw new Error('Source folder does not exist.')
+
+  const collectionId = getSourceCollectionId(input.sourceId)
+  const database = getDatabase()
+  const source = database
+    .select()
+    .from(collectionSources)
+    .where(eq(collectionSources.id, input.sourceId))
+    .get()
+  if (!source) throw new Error('Source not found.')
+  if (!source.isDynamic) throw new Error('Only dynamic sources can change folder path.')
+
+  database
+    .update(collectionSources)
+    .set({
+      sourcePath,
+      isMissing: false,
+      updatedAt: new Date().toISOString()
+    })
+    .where(eq(collectionSources.id, input.sourceId))
+    .run()
+
+  scanCollectionSource(input.sourceId)
+
+  return listCollectionMedia(collectionId)
 }
 
 export function updateCollectionSourceMediaOrder(
@@ -719,6 +1014,7 @@ export function deleteMediaFiles(collectionId: string, mediaIds: string[]): Medi
 }
 
 export function deleteCollection(collectionId: string): void {
+  deleteCollectionThumbnail(collectionId)
   getDatabase().delete(collections).where(eq(collections.id, collectionId)).run()
 }
 
@@ -738,6 +1034,26 @@ export function createTag(profileId: string, name: string, color: string): Tag {
   database.insert(tags).values({ id, profileId, name: normalizedName, color }).run()
   const tag = database.select().from(tags).where(eq(tags.id, id)).get()
   if (!tag) throw new Error('Could not create tag.')
+  return tag
+}
+
+export function updateTag(tagId: string, name: string, color: string): Tag {
+  const normalizedName = normalizeName(name).toLocaleLowerCase()
+  if (!normalizedName) throw new Error('Tag name is required.')
+  if (!/^#[0-9a-fA-F]{6}$/.test(color)) throw new Error('A valid tag color is required.')
+
+  const database = getDatabase()
+  const existingTag = database.select().from(tags).where(eq(tags.id, tagId)).get()
+  if (!existingTag) throw new Error('Tag not found.')
+
+  database
+    .update(tags)
+    .set({ name: normalizedName, color, updatedAt: new Date().toISOString() })
+    .where(eq(tags.id, tagId))
+    .run()
+
+  const tag = database.select().from(tags).where(eq(tags.id, tagId)).get()
+  if (!tag) throw new Error('Could not update tag.')
   return tag
 }
 

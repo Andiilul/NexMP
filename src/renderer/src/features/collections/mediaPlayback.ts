@@ -6,10 +6,12 @@ export type PlayerRouteState = {
   selectedIndex: number
   collectionName?: string
   returnTo?: string
+  startTime?: number
 }
 
 export function createVideoFileFromMedia(media: MediaFile): VideoFile {
   return {
+    mediaId: media.id,
     name: media.filename,
     extension: media.extension,
     path: media.filePath,

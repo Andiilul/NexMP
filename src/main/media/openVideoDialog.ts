@@ -1,8 +1,9 @@
-import { dialog } from 'electron'
+import type { WebContents } from 'electron'
 import { readdir } from 'fs/promises'
 import { extname, basename, dirname, join } from 'path'
 import { createMediaProtocolUrl } from './mediaProtocol'
 import type { OpenVideoResult, VideoFile } from '../../shared/types/media'
+import { showModalOpenDialog } from '../dialogs/modalOpenDialog'
 
 const videoExtensions = ['mp4', 'mkv', 'webm', 'mov', 'avi', 'm4v']
 const videoExtensionSet = new Set(videoExtensions)
@@ -36,8 +37,8 @@ async function createFolderPlaylist(selectedFilePath: string): Promise<VideoFile
     .map(createVideoFile)
 }
 
-export async function openVideoDialog(): Promise<OpenVideoResult> {
-  const result = await dialog.showOpenDialog({
+export async function openVideoDialog(sender?: WebContents): Promise<OpenVideoResult> {
+  const result = await showModalOpenDialog(sender, 'media:open-video', {
     title: 'Open video',
     properties: ['openFile'],
     filters: [

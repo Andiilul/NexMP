@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { Clock3, Trophy } from 'lucide-react'
+import { Trophy } from 'lucide-react'
 
 type ComingSoonPageProps = {
   eyebrow: string
@@ -28,17 +28,6 @@ function ComingSoonPage({
         </div>
       </div>
     </div>
-  )
-}
-
-export function ContinueWatchingPage(): React.JSX.Element {
-  return (
-    <ComingSoonPage
-      eyebrow="CONTINUE WATCHING"
-      title="Continue watching"
-      description="Playback progress and quick resume will live here once the feature is ready."
-      icon={Clock3}
-    />
   )
 }
 

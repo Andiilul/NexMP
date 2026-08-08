@@ -151,18 +151,34 @@ function getCommonPrefix(values: string[]): string {
   return prefix
 }
 
-function isTokenChar(value: string | undefined): boolean {
-  return value !== undefined && /^[A-Za-z0-9]$/.test(value)
+function getSmartRenameCharKind(value: string | undefined): 'letter' | 'digit' | 'separator' {
+  if (!value) return 'separator'
+  if (/^[A-Za-z]$/.test(value)) return 'letter'
+  if (/^\d$/.test(value)) return 'digit'
+
+  return 'separator'
+}
+
+function isSafeSmartRenameBoundary(left: string | undefined, right: string | undefined): boolean {
+  const leftKind = getSmartRenameCharKind(left)
+  const rightKind = getSmartRenameCharKind(right)
+
+  return leftKind === 'separator' || rightKind === 'separator' || leftKind !== rightKind
 }
 
 function normalizeCommonPrefix(prefix: string, values: string[]): string {
-  if (!prefix || !isTokenChar(prefix[prefix.length - 1])) return prefix
+  if (!prefix) return prefix
 
   const nextChars = values.map((value) => value[prefix.length])
-  if (!nextChars.some(isTokenChar)) return prefix
+  if (nextChars.every((char) => isSafeSmartRenameBoundary(prefix[prefix.length - 1], char))) {
+    return prefix
+  }
 
   let safePrefix = prefix
-  while (safePrefix && isTokenChar(safePrefix[safePrefix.length - 1])) {
+  while (
+    safePrefix &&
+    !nextChars.every((char) => isSafeSmartRenameBoundary(safePrefix[safePrefix.length - 1], char))
+  ) {
     safePrefix = safePrefix.slice(0, -1)
   }
 
@@ -190,13 +206,18 @@ function getCommonSuffix(values: string[]): string {
 }
 
 function normalizeCommonSuffix(suffix: string, values: string[]): string {
-  if (!suffix || !isTokenChar(suffix[0])) return suffix
+  if (!suffix) return suffix
 
   const previousChars = values.map((value) => value[value.length - suffix.length - 1])
-  if (!previousChars.some(isTokenChar)) return suffix
+  if (previousChars.every((char) => isSafeSmartRenameBoundary(char, suffix[0]))) {
+    return suffix
+  }
 
   let safeSuffix = suffix
-  while (safeSuffix && isTokenChar(safeSuffix[0])) {
+  while (
+    safeSuffix &&
+    !previousChars.every((char) => isSafeSmartRenameBoundary(char, safeSuffix[0]))
+  ) {
     safeSuffix = safeSuffix.slice(1)
   }
 
@@ -212,9 +233,11 @@ function findBoundaryCandidateIndex(value: string, candidate: string): number {
 
     const leftChar = value[candidateIndex - 1]
     const rightChar = value[candidateIndex + candidate.length]
-    const hasLeftBoundary = !isTokenChar(leftChar) || !isTokenChar(candidate[0])
-    const hasRightBoundary =
-      !isTokenChar(rightChar) || !isTokenChar(candidate[candidate.length - 1])
+    const hasLeftBoundary = isSafeSmartRenameBoundary(leftChar, candidate[0])
+    const hasRightBoundary = isSafeSmartRenameBoundary(
+      candidate[candidate.length - 1],
+      rightChar
+    )
     if (hasLeftBoundary && hasRightBoundary) {
       return candidateIndex
     }

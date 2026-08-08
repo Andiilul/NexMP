@@ -9,6 +9,11 @@ export type CollectionCardData = {
   isPinned?: boolean
   coverPath?: string | null
   updatedLabel?: string
+  tags?: Array<{
+    id: string
+    name: string
+    color: string
+  }>
 }
 
 export type SourceCardData = {

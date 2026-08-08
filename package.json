@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "A connected local media manager and player for Windows.",
   "main": "./out/main/index.js",
+  "bin": {
+    "nexmp": "./bin/nexmp.mjs"
+  },
   "author": "andiilul728@gmail.com",
   "homepage": "https://electron-vite.org",
   "scripts": {
@@ -28,6 +31,9 @@
     "better-sqlite3": "^13.0.2",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.2",
+    "ffmpeg-static": "^5.3.0",
+    "ffprobe-static": "^3.1.0",
+    "jassub": "^2.5.14",
     "lucide-react": "^1.28.0",
     "react-router-dom": "^7.18.2",
     "tailwindcss": "^4.3.3",

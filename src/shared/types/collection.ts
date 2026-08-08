@@ -65,6 +65,7 @@ export type SourceMediaPreview = {
   filename: string
   extension: string
   sizeBytes: number
+  url: string
 }
 
 export type CollectionSourceInput = {
@@ -74,6 +75,13 @@ export type CollectionSourceInput = {
   includedFilePaths?: string[]
 }
 
+export type CollectionThumbnailImageInput = {
+  dataUrl: string
+  originalName: string
+  originalSizeBytes: number
+  compressedSizeBytes: number
+}
+
 export type CreateCollectionInput = {
   profileId: string
   name: string
@@ -81,6 +89,7 @@ export type CreateCollectionInput = {
   sourceDynamic: boolean
   tagIds: string[]
   sources?: CollectionSourceInput[]
+  coverImage?: CollectionThumbnailImageInput | null
 }
 
 export type UpdateCollectionInput = {
@@ -89,12 +98,17 @@ export type UpdateCollectionInput = {
   tagIds?: string[]
   rating?: number
   isPinned?: boolean
+  coverImage?: CollectionThumbnailImageInput | null
+  removeCover?: boolean
 }
 
 export type UpdateCollectionSourceInput = {
   id: string
   name: string
   sortOrder: number
+  isDynamic?: boolean
+  sourcePath?: string
+  pendingAction?: 'ignore' | 'approve'
 }
 
 export type UpdateSourceMediaOrderInput = {
@@ -117,6 +131,16 @@ export type AddSourceMediaInput = {
   filePaths: string[]
 }
 
+export type UpdateSourcePendingMediaInput = {
+  sourceId: string
+  mediaIds?: string[]
+}
+
+export type ChangeSourcePathInput = {
+  sourceId: string
+  sourcePath: string
+}
+
 export type CollectionApi = {
   list: (profileId: string) => Promise<CollectionWithSources[]>
   create: (input: CreateCollectionInput) => Promise<CollectionWithSources>
@@ -132,15 +156,21 @@ export type CollectionApi = {
     collectionId: string,
     sources: UpdateCollectionSourceInput[]
   ) => Promise<CollectionWithSources>
+  changeSourcePath: (input: ChangeSourcePathInput) => Promise<MediaFile[]>
+  showSourceInExplorer: (sourceId: string) => Promise<void>
   updateSourceMediaOrder: (input: UpdateSourceMediaOrderInput) => Promise<CollectionWithSources>
   rescan: (collectionId: string) => Promise<MediaFile[]>
   rescanSource: (sourceId: string) => Promise<MediaFile[]>
+  refreshSourceMediaAvailability: (sourceId: string) => Promise<MediaFile[]>
   confirmPendingMedia: (collectionId: string) => Promise<MediaFile[]>
+  approveSourcePendingMedia: (input: UpdateSourcePendingMediaInput) => Promise<MediaFile[]>
+  rejectSourcePendingMedia: (input: UpdateSourcePendingMediaInput) => Promise<MediaFile[]>
   addMedia: (input: AddSourceMediaInput) => Promise<MediaFile[]>
   updateMedia: (collectionId: string, media: UpdateMediaFileInput[]) => Promise<MediaFile[]>
   deleteMedia: (collectionId: string, mediaIds: string[]) => Promise<MediaFile[]>
   listTags: (profileId: string) => Promise<Tag[]>
   createTag: (profileId: string, name: string, color: string) => Promise<Tag>
+  updateTag: (tagId: string, name: string, color: string) => Promise<Tag>
   deleteTag: (tagId: string) => Promise<void>
   listMedia: (collectionId: string) => Promise<MediaFile[]>
   listSourceMedia: (sourceId: string) => Promise<MediaFile[]>
