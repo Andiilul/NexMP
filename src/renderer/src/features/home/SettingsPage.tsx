@@ -1,7 +1,7 @@
-import { Check, Settings, UserRound } from 'lucide-react'
+import { AlertTriangle, Check, Settings, Trash2, UserRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { Profile } from '../../../../shared/types/profile'
+import type { Profile, ProfileDeleteSummary } from '../../../../shared/types/profile'
 import type { PlayerEngine } from '../../../../shared/types/media'
 import { useAppState } from '../../components/useAppState'
 import { useToast } from '../../components/useToast'
@@ -18,11 +18,15 @@ function getInitials(name: string): string {
 export function SettingsPage(): React.JSX.Element {
   const navigate = useNavigate()
   const { success, warning } = useToast()
-  const { appState, setPlayerEngine, setLoginProfile } = useAppState()
+  const { appState, setPlayerEngine, setLoginProfile, clearLoginProfile } = useAppState()
   const [activeProfile, setActiveProfile] = useState<Profile | null>(null)
   const [profileName, setProfileName] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [deleteSummary, setDeleteSummary] = useState<ProfileDeleteSummary | null>(null)
+  const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -79,7 +83,55 @@ export function SettingsPage(): React.JSX.Element {
     }
   }
 
+  const openDeleteDialog = async (): Promise<void> => {
+    if (!activeProfile) return
+
+    try {
+      setError(null)
+      setDeleteConfirmation('')
+      const summary = await window.api?.profiles.getDeleteSummary(activeProfile.id)
+      if (!summary) throw new Error('Unable to prepare profile deletion.')
+      setDeleteSummary(summary)
+      setIsDeleteDialogOpen(true)
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : 'Unable to prepare deletion.'
+      setError(message)
+      warning(message)
+    }
+  }
+
+  const closeDeleteDialog = (): void => {
+    if (isDeleting) return
+
+    setIsDeleteDialogOpen(false)
+    setDeleteSummary(null)
+    setDeleteConfirmation('')
+  }
+
+  const deleteProfile = async (): Promise<void> => {
+    if (!activeProfile || !deleteSummary || deleteConfirmation !== deletePhrase) return
+
+    try {
+      setIsDeleting(true)
+      setError(null)
+      await window.api?.profiles.delete(activeProfile.id)
+      clearLoginProfile()
+      window.dispatchEvent(new CustomEvent('nexmp:profile-deleted', { detail: activeProfile }))
+      success('Library deleted.')
+      navigate('/', { replace: true })
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : 'Unable to delete library.'
+      setError(message)
+      warning(message)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   const hasProfileNameChanged = profileName.trim() !== (activeProfile?.name ?? '')
+  const deletePhrase = activeProfile ? `DELETE ${activeProfile.name}` : ''
+  const canDeleteProfile =
+    Boolean(activeProfile && deleteSummary) && deleteConfirmation === deletePhrase && !isDeleting
   const engineOptions: Array<{
     value: PlayerEngine
     title: string
@@ -96,7 +148,8 @@ export function SettingsPage(): React.JSX.Element {
       value: 'mpv',
       title: 'MPV engine',
       badge: 'Beta',
-      description: 'Experimental native mpv renderer inside NexMP. Use only when HTML playback needs a fallback.'
+      description:
+        'Experimental native mpv renderer inside NexMP. Use only when HTML playback needs a fallback.'
     }
   ]
 
@@ -167,6 +220,37 @@ export function SettingsPage(): React.JSX.Element {
         )}
       </section>
 
+      <section className="flex flex-col gap-5 rounded-2xl border border-[#ff6f60]/25 bg-[#3e1c1f]/25 p-7">
+        <div className="flex items-center gap-3">
+          <span className="grid h-11 w-11 place-items-center rounded-lg bg-[#ff6f60]/15 text-[#ffaaa0]">
+            <AlertTriangle size={22} />
+          </span>
+          <div className="flex flex-col gap-1">
+            <h2 className="font-bold">
+              {' '}
+              Delete this library profile and all data stored under it.
+            </h2>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[#ff6f60]/25 bg-[#171a1f]/80 p-4">
+          <div className="flex min-w-0 flex-col gap-1">
+            <p className="font-bold text-[#f4fff8]">Delete library profile</p>
+            <p className="text-sm text-[#a9c8bf]">
+              This removes the selected library, collections, tags, progress, and video rows.
+            </p>
+          </div>
+          <button
+            className="inline-flex items-center gap-2 rounded-lg bg-[#ff6f60] px-4 py-2.5 font-bold text-[#220806] transition hover:bg-[#ff8a7e] disabled:opacity-60"
+            type="button"
+            onClick={() => void openDeleteDialog()}
+            disabled={!activeProfile || isLoading || isDeleting}
+          >
+            <Trash2 size={18} />
+            Delete Library
+          </button>
+        </div>
+      </section>
+
       <section className="flex flex-col gap-5 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-7">
         <div className="flex items-center gap-3">
           <span className="grid h-11 w-11 place-items-center rounded-lg bg-[#00b875]/10 text-[#00d982]">
@@ -213,6 +297,76 @@ export function SettingsPage(): React.JSX.Element {
           })}
         </div>
       </section>
+
+      {isDeleteDialogOpen && activeProfile && deleteSummary && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-4"
+          role="presentation"
+          onMouseDown={closeDeleteDialog}
+        >
+          <div
+            className="flex w-full max-w-lg flex-col gap-5 rounded-2xl border border-[#ff6f60]/30 bg-[#17191e] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-[#ff6f60]/15 text-[#ffaaa0]">
+                <AlertTriangle size={22} />
+              </span>
+              <div className="flex flex-col gap-2">
+                <h2 className="text-xl font-bold text-[#f4fff8]">Delete this library?</h2>
+                <p className="text-sm text-[#a9c8bf]">
+                  Anda akan menghapus library ini. Tindakan ini permanen dan tidak bisa dibatalkan.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-2 rounded-xl border border-white/10 bg-[#0d0f12]/80 p-4 text-sm">
+              <div className="flex justify-between gap-4">
+                <span className="text-[#a9c8bf]">Collection:</span>
+                <span className="font-bold text-[#f4fff8]">{deleteSummary.collectionCount}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-[#a9c8bf]">Videos:</span>
+                <span className="font-bold text-[#f4fff8]">{deleteSummary.videoCount}</span>
+              </div>
+            </div>
+
+            <label className="flex flex-col gap-2 text-sm" htmlFor="delete-profile-confirmation">
+              <span className="font-semibold text-[#f4fff8]">
+                Type <span className="text-[#ffaaa0]">&quot;{deletePhrase}&quot;</span>
+              </span>
+              <input
+                id="delete-profile-confirmation"
+                className="w-full rounded-lg border border-[#ff6f60]/35 bg-[#0d0f12] px-4 py-3 text-[#f4fff8] outline-none placeholder:text-white/30 focus:border-[#ff6f60]"
+                value={deleteConfirmation}
+                onChange={(event) => setDeleteConfirmation(event.target.value)}
+                placeholder={deletePhrase}
+                autoFocus
+              />
+            </label>
+
+            <div className="flex justify-end gap-3">
+              <button
+                className="rounded-lg px-4 py-2.5 font-semibold text-[#a9c8bf] transition hover:bg-white/5 hover:text-[#f4fff8]"
+                type="button"
+                onClick={closeDeleteDialog}
+                disabled={isDeleting}
+              >
+                Cancel
+              </button>
+              <button
+                className="inline-flex items-center gap-2 rounded-lg bg-[#ff6f60] px-4 py-2.5 font-bold text-[#220806] transition hover:bg-[#ff8a7e] disabled:opacity-50"
+                type="button"
+                onClick={() => void deleteProfile()}
+                disabled={!canDeleteProfile}
+              >
+                <Trash2 size={18} />
+                {isDeleting ? 'Deleting...' : 'Delete Library'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

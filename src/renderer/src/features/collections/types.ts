@@ -5,6 +5,7 @@ export type CollectionCardData = {
   name: string
   sourceCount: number
   videoCount: number
+  pendingCount?: number
   rating?: number
   isPinned?: boolean
   coverPath?: string | null
@@ -21,6 +22,7 @@ export type SourceCardData = {
   name: string
   sourcePath: string
   videoCount: number
+  pendingCount?: number
   isMissing?: boolean
   lastScannedLabel?: string
 }

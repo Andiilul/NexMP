@@ -153,6 +153,11 @@ export function CollectionCard({
           <div className="flex items-center gap-2">
             <Folder size={18} className="inline-block" /> {collection.sourceCount} -{' '}
             <Video size={18} className="inline-block" /> {collection.videoCount}
+            {(collection.pendingCount ?? 0) > 0 && (
+              <span className="rounded-full border border-[#f5b84b]/35 bg-[#f5b84b]/15 px-2 py-0.5 text-xs font-bold text-[#f5c76d]">
+                {collection.pendingCount} pending
+              </span>
+            )}
           </div>
           {collection.updatedLabel && (
             <p className="text-xs font-bold text-nex-muted">{collection.updatedLabel}</p>

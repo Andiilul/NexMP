@@ -7,6 +7,7 @@ type SourceCardProps = {
   source: CollectionSource
   viewMode: LibraryViewMode
   videoCount: number
+  pendingCount?: number
   collectionId?: string
   onOpen?: (source: CollectionSource) => void
   onRename?: (source: CollectionSource) => void
@@ -16,6 +17,7 @@ export function SourceCard({
   source,
   viewMode,
   videoCount,
+  pendingCount = 0,
   collectionId,
   onOpen,
   onRename
@@ -65,13 +67,20 @@ export function SourceCard({
           {source.name}
         </button>
         <p className="truncate text-sm text-[#a9c8bf]">{source.sourcePath}</p>
-        <p className="text-xs text-[#a9c8bf]/70">
-          {source.isMissing
-            ? `Folder unavailable - ${source.isDynamic ? 'dynamic' : 'manual'}`
-            : `${videoCount} ${videoCount === 1 ? 'video' : 'videos'} - ${
-                source.isDynamic ? 'dynamic' : 'manual'
-              }`}
-        </p>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-[#a9c8bf]/70">
+          <span>
+            {source.isMissing
+              ? `Folder unavailable - ${source.isDynamic ? 'dynamic' : 'manual'}`
+              : `${videoCount} ${videoCount === 1 ? 'video' : 'videos'} - ${
+                  source.isDynamic ? 'dynamic' : 'manual'
+                }`}
+          </span>
+          {pendingCount > 0 && (
+            <span className="rounded-full border border-[#f5b84b]/35 bg-[#f5b84b]/15 px-2 py-0.5 font-bold text-[#f5c76d]">
+              {pendingCount} pending
+            </span>
+          )}
+        </div>
       </div>
       {onRename && (
         <div className={isGrid ? 'border-t border-white/[0.08]' : 'shrink-0'}>

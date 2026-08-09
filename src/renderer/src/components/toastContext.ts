@@ -7,6 +7,10 @@ export type ToastInput = {
   title: string
   description?: string
   durationMs?: number
+  action?: {
+    label: string
+    onClick: () => void
+  }
 }
 
 export type ToastApi = {
@@ -17,7 +21,7 @@ export type ToastApi = {
 }
 
 export type ToastMessage = Required<Pick<ToastInput, 'mode' | 'title'>> &
-  Pick<ToastInput, 'description'> & {
+  Pick<ToastInput, 'description' | 'action'> & {
     id: string
   }
 

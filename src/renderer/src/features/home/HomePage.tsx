@@ -27,6 +27,7 @@ import { formatTagName } from '../tags/tagDisplay'
 type HomeLayoutContext = { openCollectionDialog: () => void }
 type HomeCollection = CollectionSearchResult & {
   videoCount: number
+  pendingCount: number
   mediaForCollection: MediaFile[]
 }
 type TagMatchMode = 'all' | 'any'
@@ -101,6 +102,8 @@ export function HomePage(): React.JSX.Element {
           ...collection,
           mediaForCollection,
           videoCount: mediaForCollection.filter((media) => !media.isMissing && !media.isPending)
+            .length,
+          pendingCount: mediaForCollection.filter((media) => media.isPending && !media.isMissing)
             .length
         }
       }),
@@ -414,6 +417,7 @@ export function HomePage(): React.JSX.Element {
           ...collection,
           sourceCount: collection.sources.length,
           videoCount: collection.videoCount,
+          pendingCount: collection.pendingCount,
           rating: collection.rating,
           isPinned: collection.isPinned,
           tags: collection.tags,

@@ -41,11 +41,11 @@ export function ToastProvider({ children }: ToastProviderProps): React.JSX.Eleme
   }, [])
 
   const showToast = useCallback(
-    ({ mode = 'info', title, description, durationMs = 3200 }: ToastInput): void => {
+    ({ mode = 'info', title, description, durationMs = 4800, action }: ToastInput): void => {
       const id = createToastId()
       setMessages((currentMessages) => [
         ...currentMessages.slice(-2),
-        { id, mode, title, description }
+        { id, mode, title, description, action }
       ])
       window.setTimeout(() => dismissToast(id), durationMs)
     },
@@ -72,7 +72,7 @@ export function ToastProvider({ children }: ToastProviderProps): React.JSX.Eleme
           return (
             <div
               key={message.id}
-              className={`flex flex-col gap-1 rounded-xl border ${style.border} ${style.background} px-4 py-3 text-sm text-[#f4fff8] shadow-[0_18px_52px_rgba(0,0,0,0.45)] backdrop-blur-md`}
+              className={`pointer-events-auto flex flex-col gap-1 rounded-xl border ${style.border} ${style.background} px-4 py-3 text-sm text-[#f4fff8] shadow-[0_18px_52px_rgba(0,0,0,0.45)] backdrop-blur-md`}
             >
               <p className={`text-xs font-black uppercase tracking-[0.18em] ${style.accent}`}>
                 {message.mode}
@@ -80,6 +80,18 @@ export function ToastProvider({ children }: ToastProviderProps): React.JSX.Eleme
               <p className="font-bold">{message.title}</p>
               {message.description && (
                 <p className="text-xs leading-relaxed text-[#a9c8bf]">{message.description}</p>
+              )}
+              {message.action && (
+                <button
+                  className="mt-2 w-fit rounded-lg border border-white/15 px-3 py-1.5 text-xs font-bold text-[#f4fff8] transition hover:bg-white/10"
+                  type="button"
+                  onClick={() => {
+                    message.action?.onClick()
+                    dismissToast(message.id)
+                  }}
+                >
+                  {message.action.label}
+                </button>
               )}
             </div>
           )

@@ -69,7 +69,7 @@ export function CollectionDetailPage(): React.JSX.Element {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
-  const { info, warning } = useToast()
+  const toast = useToast()
   const [collection, setCollection] = useState<CollectionDetail | null>(null)
   const [availableTags, setAvailableTags] = useState<Tag[]>([])
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([])
@@ -87,6 +87,7 @@ export function CollectionDetailPage(): React.JSX.Element {
   const [singleSourceActiveTab, setSingleSourceActiveTab] = useState<SingleSourceMediaTab>('videos')
   const [isSingleMissingAlertOpen, setIsSingleMissingAlertOpen] = useState(false)
   const [isSingleDynamicOffConfirmOpen, setIsSingleDynamicOffConfirmOpen] = useState(false)
+  const [newSinglePendingNoticeCount, setNewSinglePendingNoticeCount] = useState(0)
   const [shouldClearSinglePendingOnSave, setShouldClearSinglePendingOnSave] = useState(false)
   const hasShownSingleMissingAlertRef = useRef(false)
   const returnTo = `${location.pathname}${location.search}`
@@ -176,7 +177,12 @@ export function CollectionDetailPage(): React.JSX.Element {
     setAvailableTags(nextTags)
     setMediaFiles(nextMediaFiles)
     applyEditState(nextCollection, nextMediaFiles)
-  }, [fetchCollection, info])
+  }, [fetchCollection])
+
+  const reviewSingleSourcePendingMedia = useCallback((): void => {
+    setSingleSourceActiveTab('pending')
+    setNewSinglePendingNoticeCount(0)
+  }, [])
 
   useEffect(() => {
     let isMounted = true
@@ -205,11 +211,19 @@ export function CollectionDetailPage(): React.JSX.Element {
           : []
 
         if (nextSinglePendingMedia.length > 0) {
-          info(
-            `Found ${nextSinglePendingMedia.length} new ${
-              nextSinglePendingMedia.length === 1 ? 'video' : 'videos'
-            }.`
-          )
+          const label = `${nextSinglePendingMedia.length} new ${
+            nextSinglePendingMedia.length === 1 ? 'video' : 'videos'
+          }`
+          setNewSinglePendingNoticeCount(nextSinglePendingMedia.length)
+          toast.showToast({
+            mode: 'info',
+            title: `Found ${label} in this folder.`,
+            description: 'Review pending items before they move into Videos.',
+            action: {
+              label: 'Review',
+              onClick: reviewSingleSourcePendingMedia
+            }
+          })
           setSingleSourceActiveTab('pending')
         } else if (
           !hasShownSingleMissingAlertRef.current &&
@@ -231,7 +245,7 @@ export function CollectionDetailPage(): React.JSX.Element {
     return () => {
       isMounted = false
     }
-  }, [fetchCollection])
+  }, [fetchCollection, reviewSingleSourcePendingMedia, toast])
 
   const playableMedia = mediaFiles.filter((media) => !media.isMissing && !media.isPending)
   const thumbnailVideoOptions = useMemo(
@@ -271,6 +285,13 @@ export function CollectionDetailPage(): React.JSX.Element {
 
     return counts
   }, {})
+  const pendingCountBySource = mediaFiles.reduce<Record<string, number>>((counts, media) => {
+    if (media.isPending && !media.isMissing) {
+      counts[media.collectionSourceId] = (counts[media.collectionSourceId] ?? 0) + 1
+    }
+
+    return counts
+  }, {})
   const singleSourceDraft = singleSource
     ? (editSources.find((source) => source.id === singleSource.id) ?? null)
     : null
@@ -280,7 +301,7 @@ export function CollectionDetailPage(): React.JSX.Element {
   const setSingleSourceDynamicDraft = (isDynamic: boolean): void => {
     if (!singleSource) return
 
-    if (singleSource.isDynamic && !isDynamic && singleSourcePendingMedia.length > 0) {
+    if (singleSource.isDynamic && !isDynamic) {
       setIsSingleDynamicOffConfirmOpen(true)
       return
     }
@@ -336,7 +357,7 @@ export function CollectionDetailPage(): React.JSX.Element {
   const playCollection = (): void => {
     const playlist = createPlayablePlaylist(mediaFiles)
     if (playlist.length === 0) {
-      warning('This collection does not have playable videos yet.')
+      toast.warning('This collection does not have playable videos yet.')
       return
     }
 
@@ -641,7 +662,9 @@ export function CollectionDetailPage(): React.JSX.Element {
   const addMediaToSingleSource = async (): Promise<void> => {
     if (!singleSource) return
     if (singleSource.isDynamic) {
-      warning('Dynamic folders use rescan. Turn off Dynamic to add videos from other folders.')
+      toast.warning(
+        'Dynamic folders use rescan. Turn off Dynamic to add videos from other folders.'
+      )
       return
     }
 
@@ -784,7 +807,7 @@ export function CollectionDetailPage(): React.JSX.Element {
                 {collection.sources.length} {collection.sources.length === 1 ? 'folder' : 'folders'}{' '}
                 - {playableMedia.length} {playableMedia.length === 1 ? 'video' : 'videos'}
               </p>
-              {isEditing && singleSource ? (
+              {isEditing && isSingleFolder && singleSource ? (
                 <label className="flex w-fit items-start gap-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-[#a9c8bf]">
                   <input
                     className="mt-0.5 h-4 w-4 accent-[#00b875]"
@@ -796,11 +819,11 @@ export function CollectionDetailPage(): React.JSX.Element {
                     <span className="block font-bold text-[#f4fff8]">Dynamic source</span>
                     <span className="block text-xs">
                       Auto-follow this folder. Turn off to keep a manual list and add videos from
-                      other folders.
+                      other folders. This cannot be changed back to Dynamic.
                     </span>
                   </span>
                 </label>
-              ) : singleSource ? (
+              ) : isSingleFolder && singleSource ? (
                 <span
                   className={`w-fit rounded-full px-3 py-1 text-xs font-bold ${
                     singleSource.isDynamic
@@ -961,41 +984,92 @@ export function CollectionDetailPage(): React.JSX.Element {
           </div>
 
           {isSingleFolder && singleSource && !isEditing && (
-            <div className="flex flex-wrap gap-2">
-              {[
-                { id: 'videos' as const, label: 'Videos', count: singleSourceApprovedMedia.length },
-                ...(singleSource.isDynamic
-                  ? [
-                      {
-                        id: 'pending' as const,
-                        label: 'Pending',
-                        count: singleSourcePendingMedia.length
-                      }
-                    ]
-                  : []),
-                ...(singleSource.isMissing || singleSourceMissingMedia.length > 0
-                  ? [
-                      {
-                        id: 'missing' as const,
-                        label: 'Missing files',
-                        count: singleSourceMissingMedia.length
-                      }
-                    ]
-                  : [])
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  className={`rounded-lg px-4 py-2 text-sm font-bold transition ${
-                    singleSourceActiveTab === tab.id
-                      ? 'bg-[#00b875] text-[#04120d]'
-                      : 'border border-white/15 text-[#a9c8bf] hover:bg-white/5 hover:text-[#f4fff8]'
-                  }`}
-                  type="button"
-                  onClick={() => setSingleSourceActiveTab(tab.id)}
-                >
-                  {tab.label} {tab.count > 0 ? `(${tab.count})` : ''}
-                </button>
-              ))}
+            <div className="flex flex-col gap-3">
+              {newSinglePendingNoticeCount > 0 && singleSourcePendingMedia.length > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#f5b84b]/35 bg-[#2b2110]/70 px-4 py-3 text-sm text-[#f4fff8]">
+                  <div>
+                    <p className="font-bold">
+                      {newSinglePendingNoticeCount} new{' '}
+                      {newSinglePendingNoticeCount === 1 ? 'video' : 'videos'} found from dynamic
+                      scan
+                    </p>
+                    <p className="text-xs text-[#f5dca1]">
+                      Review pending items before adding them to Videos.
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      className="rounded-lg bg-[#f5b84b] px-3 py-2 text-xs font-bold text-[#1d1506] transition hover:bg-[#f5c76d]"
+                      type="button"
+                      onClick={reviewSingleSourcePendingMedia}
+                    >
+                      Review
+                    </button>
+                    <button
+                      className="rounded-lg border border-white/15 px-3 py-2 text-xs font-bold text-[#f4fff8] transition hover:bg-white/5"
+                      type="button"
+                      onClick={() => setNewSinglePendingNoticeCount(0)}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {[
+                  {
+                    id: 'videos' as const,
+                    label: 'Videos',
+                    count: singleSourceApprovedMedia.length
+                  },
+                  ...(singleSource.isDynamic
+                    ? [
+                        {
+                          id: 'pending' as const,
+                          label: 'Pending',
+                          count: singleSourcePendingMedia.length
+                        }
+                      ]
+                    : []),
+                  ...(singleSource.isMissing || singleSourceMissingMedia.length > 0
+                    ? [
+                        {
+                          id: 'missing' as const,
+                          label: 'Missing files',
+                          count: singleSourceMissingMedia.length
+                        }
+                      ]
+                    : [])
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    className={`rounded-lg px-4 py-2 text-sm font-bold transition ${
+                      singleSourceActiveTab === tab.id
+                        ? 'bg-[#00b875] text-[#04120d]'
+                        : 'border border-white/15 text-[#a9c8bf] hover:bg-white/5 hover:text-[#f4fff8]'
+                    }`}
+                    type="button"
+                    onClick={() => setSingleSourceActiveTab(tab.id)}
+                  >
+                    <span>{tab.label}</span>
+                    {tab.count > 0 && (
+                      <span
+                        className={`ml-2 rounded-full px-2 py-0.5 text-xs ${
+                          tab.id === 'pending'
+                            ? singleSourceActiveTab === tab.id
+                              ? 'bg-[#04120d]/15 text-[#04120d]'
+                              : 'bg-[#f5b84b]/20 text-[#f5c76d]'
+                            : singleSourceActiveTab === tab.id
+                              ? 'bg-[#04120d]/15 text-[#04120d]'
+                              : 'bg-white/10 text-[#d3e7e0]'
+                        }`}
+                      >
+                        {tab.count}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
@@ -1208,6 +1282,7 @@ export function CollectionDetailPage(): React.JSX.Element {
                     viewMode={viewMode}
                     collectionId={collection.id}
                     videoCount={mediaCountBySource[source.id] ?? 0}
+                    pendingCount={pendingCountBySource[source.id] ?? 0}
                     onRename={(selectedSource) =>
                       navigate(
                         `/home/collections/${collection.id}/sources/${selectedSource.id}?edit=1`
@@ -1454,9 +1529,12 @@ export function CollectionDetailPage(): React.JSX.Element {
             <div>
               <h2 className="text-lg font-bold">Turn off Dynamic?</h2>
               <p className="pt-2 text-sm text-[#a9c8bf]">
-                This folder has {singleSourcePendingMedia.length} pending{' '}
-                {singleSourcePendingMedia.length === 1 ? 'video' : 'videos'}. Turning off Dynamic
-                will delete those pending rows when you confirm settings.
+                {singleSourcePendingMedia.length > 0
+                  ? `This folder has ${singleSourcePendingMedia.length} pending ${
+                      singleSourcePendingMedia.length === 1 ? 'video' : 'videos'
+                    }. Turning off Dynamic will delete those pending rows when you confirm settings.`
+                  : 'Turning off Dynamic will make this folder manual.'}{' '}
+                This change is irreversible; Manual sources cannot be changed back to Dynamic.
               </p>
             </div>
             <div className="flex justify-end gap-3">

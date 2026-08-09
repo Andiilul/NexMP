@@ -42,6 +42,7 @@ export function CollectionSourcePage(): React.JSX.Element {
   const [selectedPendingMediaIds, setSelectedPendingMediaIds] = useState<string[]>([])
   const [isMissingAlertOpen, setIsMissingAlertOpen] = useState(false)
   const [isDynamicOffConfirmOpen, setIsDynamicOffConfirmOpen] = useState(false)
+  const [newPendingNoticeCount, setNewPendingNoticeCount] = useState(0)
   const [dynamicOffPendingAction, setDynamicOffPendingAction] = useState<
     'ignore' | 'approve' | null
   >(null)
@@ -139,6 +140,11 @@ export function CollectionSourcePage(): React.JSX.Element {
     applyEditState(nextSource, nextMediaFiles)
   }, [fetchSource])
 
+  const reviewPendingMedia = useCallback((): void => {
+    setActiveTab('pending')
+    setNewPendingNoticeCount(0)
+  }, [])
+
   useEffect(() => {
     let isMounted = true
 
@@ -155,11 +161,19 @@ export function CollectionSourcePage(): React.JSX.Element {
           (media) => media.collectionSourceId === sourceId && media.isMissing && !media.isPending
         )
         if (newPendingMedia.length > 0) {
-          toast.info(
-            `Found ${newPendingMedia.length} new ${
-              newPendingMedia.length === 1 ? 'video' : 'videos'
-            }.`
-          )
+          const label = `${newPendingMedia.length} new ${
+            newPendingMedia.length === 1 ? 'video' : 'videos'
+          }`
+          setNewPendingNoticeCount(newPendingMedia.length)
+          toast.showToast({
+            mode: 'info',
+            title: `Found ${label} in this source.`,
+            description: 'Review pending items before they move into Videos.',
+            action: {
+              label: 'Review',
+              onClick: reviewPendingMedia
+            }
+          })
           setActiveTab('pending')
         } else if (
           !hasShownMissingAlertRef.current &&
@@ -180,7 +194,7 @@ export function CollectionSourcePage(): React.JSX.Element {
     return () => {
       isMounted = false
     }
-  }, [fetchSource, sourceId, toast])
+  }, [fetchSource, reviewPendingMedia, sourceId, toast])
 
   const playMedia = (media: MediaFile): void => {
     if (media.isMissing) {
@@ -307,7 +321,7 @@ export function CollectionSourcePage(): React.JSX.Element {
   }
 
   const requestDynamicChange = (isDynamic: boolean): void => {
-    if (source?.isDynamic && !isDynamic && pendingMedia.length > 0) {
+    if (source?.isDynamic && !isDynamic) {
       setIsDynamicOffConfirmOpen(true)
       return
     }
@@ -612,7 +626,7 @@ export function CollectionSourcePage(): React.JSX.Element {
                     <span className="block font-bold text-[#f4fff8]">Dynamic source</span>
                     <span className="block text-xs">
                       {source.isDynamic
-                        ? 'Auto-follow this folder. Turn off to keep a manual list and add videos from other folders.'
+                        ? 'Auto-follow this folder. Turn off to keep a manual list and add videos from other folders. This cannot be changed back to Dynamic.'
                         : 'Manual sources cannot be changed back to Dynamic. Create a new dynamic source instead.'}
                     </span>
                   </span>
@@ -721,6 +735,35 @@ export function CollectionSourcePage(): React.JSX.Element {
           )}
 
           <section className="flex flex-col gap-4 pt-4">
+            {!isEditing && newPendingNoticeCount > 0 && pendingMedia.length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#f5b84b]/35 bg-[#2b2110]/70 px-4 py-3 text-sm text-[#f4fff8]">
+                <div>
+                  <p className="font-bold">
+                    {newPendingNoticeCount} new {newPendingNoticeCount === 1 ? 'video' : 'videos'}{' '}
+                    found from dynamic scan
+                  </p>
+                  <p className="text-xs text-[#f5dca1]">
+                    Review pending items before adding them to Videos.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    className="rounded-lg bg-[#f5b84b] px-3 py-2 text-xs font-bold text-[#1d1506] transition hover:bg-[#f5c76d]"
+                    type="button"
+                    onClick={reviewPendingMedia}
+                  >
+                    Review
+                  </button>
+                  <button
+                    className="rounded-lg border border-white/15 px-3 py-2 text-xs font-bold text-[#f4fff8] transition hover:bg-white/5"
+                    type="button"
+                    onClick={() => setNewPendingNoticeCount(0)}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
             {!isEditing && (
               <div className="flex flex-wrap items-center gap-2">
                 {[
@@ -748,7 +791,22 @@ export function CollectionSourcePage(): React.JSX.Element {
                     type="button"
                     onClick={() => setActiveTab(tab.id)}
                   >
-                    {tab.label} {tab.count > 0 ? `(${tab.count})` : ''}
+                    <span>{tab.label}</span>
+                    {tab.count > 0 && (
+                      <span
+                        className={`ml-2 rounded-full px-2 py-0.5 text-xs ${
+                          tab.id === 'pending'
+                            ? activeTab === tab.id
+                              ? 'bg-[#04120d]/15 text-[#04120d]'
+                              : 'bg-[#f5b84b]/20 text-[#f5c76d]'
+                            : activeTab === tab.id
+                              ? 'bg-[#04120d]/15 text-[#04120d]'
+                              : 'bg-white/10 text-[#d3e7e0]'
+                        }`}
+                      >
+                        {tab.count}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -939,9 +997,12 @@ export function CollectionSourcePage(): React.JSX.Element {
             <div>
               <h2 className="text-lg font-bold">Turn off Dynamic?</h2>
               <p className="pt-2 text-sm text-[#a9c8bf]">
-                This source still has {pendingMedia.length} pending{' '}
-                {pendingMedia.length === 1 ? 'item' : 'items'}. Choose what to do before changing it
-                to Manual.
+                {pendingMedia.length > 0
+                  ? `This source still has ${pendingMedia.length} pending ${
+                      pendingMedia.length === 1 ? 'item' : 'items'
+                    }. Choose what to do before changing it to Manual.`
+                  : 'Turning off Dynamic will make this source manual.'}{' '}
+                This change is irreversible; Manual sources cannot be changed back to Dynamic.
               </p>
             </div>
             <div className="flex justify-end gap-3">
@@ -952,20 +1013,32 @@ export function CollectionSourcePage(): React.JSX.Element {
               >
                 Cancel
               </button>
-              <button
-                className="rounded-lg border border-[#ff6f60]/35 px-4 py-2.5 font-bold text-[#ffaaa0] hover:bg-[#3e1c1f]/70"
-                type="button"
-                onClick={() => confirmDynamicOff('ignore')}
-              >
-                Ignore
-              </button>
-              <button
-                className="rounded-lg bg-[#00b875] px-4 py-2.5 font-bold text-[#04120d]"
-                type="button"
-                onClick={() => confirmDynamicOff('approve')}
-              >
-                Approve
-              </button>
+              {pendingMedia.length > 0 ? (
+                <>
+                  <button
+                    className="rounded-lg border border-[#ff6f60]/35 px-4 py-2.5 font-bold text-[#ffaaa0] hover:bg-[#3e1c1f]/70"
+                    type="button"
+                    onClick={() => confirmDynamicOff('ignore')}
+                  >
+                    Ignore
+                  </button>
+                  <button
+                    className="rounded-lg bg-[#00b875] px-4 py-2.5 font-bold text-[#04120d]"
+                    type="button"
+                    onClick={() => confirmDynamicOff('approve')}
+                  >
+                    Approve
+                  </button>
+                </>
+              ) : (
+                <button
+                  className="rounded-lg bg-[#ff6f60] px-4 py-2.5 font-bold text-[#220806]"
+                  type="button"
+                  onClick={() => confirmDynamicOff('ignore')}
+                >
+                  Turn off Dynamic
+                </button>
+              )}
             </div>
           </div>
         </div>

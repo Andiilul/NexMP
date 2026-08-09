@@ -29,7 +29,9 @@ const api: NexmpApi = {
   profiles: {
     list: () => ipcRenderer.invoke('profiles:list'),
     create: (input) => ipcRenderer.invoke('profiles:create', input),
-    update: (input) => ipcRenderer.invoke('profiles:update', input)
+    update: (input) => ipcRenderer.invoke('profiles:update', input),
+    getDeleteSummary: (profileId) => ipcRenderer.invoke('profiles:get-delete-summary', profileId),
+    delete: (profileId) => ipcRenderer.invoke('profiles:delete', profileId)
   },
   collections: {
     list: (profileId) => ipcRenderer.invoke('collections:list', profileId),
